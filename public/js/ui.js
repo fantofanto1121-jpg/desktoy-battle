@@ -138,8 +138,9 @@ function drawTitle(ctx, vw, vh, st) {
 
   const big = UI.big;   // スマホではボタンを大きく
   const bw = big ? Math.min(220, vw - 24) : Math.min(150, vw - 40), bx = Math.floor((vw - bw) / 2);
-  const bh = big ? 28 : 20, gap = big ? 34 : 26;
+  const bh = big ? 28 : 20;
   let by = y + ch + 16;
+  const gap = Math.max(bh + 3, Math.min(big ? 34 : 26, Math.floor((vh - 6 - bh - by) / 4)));
   if (st.mode === 'join') {
     card(ctx, bx - 14, by - 6, bw + 28, big ? 114 : 98, {});
     txt(ctx, 'ルームコードを入力', vw / 2, by, 10, COL.inkSoft, false, 'c');
@@ -160,6 +161,7 @@ function drawTitle(ctx, vw, vh, st) {
     button(ctx, 'quick', 'ランダムマッチ', bx, by + gap, bw, bh, { band: '#c9a53f' });
     button(ctx, 'create', '友達とルームを作る', bx, by + gap * 2, bw, bh, { band: COL.red });
     button(ctx, 'join', 'ルームに参加', bx, by + gap * 3, bw, bh, { band: COL.blue });
+    button(ctx, 'mini', 'ミニゲーム', bx, by + gap * 4, bw, bh, { band: '#7f9a6a' });
   }
   if (st.error) {
     const w = txtW(st.error, 10) + 12;

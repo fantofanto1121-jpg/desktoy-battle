@@ -178,6 +178,7 @@ window.addEventListener('keydown', e => {
   }
   if (e.repeat) { e.preventDefault(); return; }
   G.keys.add(e.code);
+  if (G.screen === 'mini') { mgKey(e.code); if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); }
   if (G.screen === 'game') {
     if (e.code === 'Space') skill('a');
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') skill('b');
@@ -222,16 +223,22 @@ canvas.addEventListener('pointerdown', e => {
     return;
   }
   if (b) UI.pressed = b.id;
+  else if (G.screen === 'mini') {
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* 合成イベントなど */ }
+    mgDown(x, y, e.pointerId);
+  }
 });
 canvas.addEventListener('pointermove', e => {
   const [x, y] = toLogical(e);
   if (e.pointerId === G.stick.id) { moveStick(x, y); return; }
   const b = hitButton(x, y);
   UI.hover = b ? b.id : null;
+  if (G.screen === 'mini') mgMove(x, y, e.pointerId);
 });
 function endPointer(e) {
   if (e.pointerId === G.stick.id) { G.stick.id = null; G.stick.kx = 0; G.stick.ky = 0; sendInput(true); return; }
   const [x, y] = toLogical(e);
+  if (G.screen === 'mini' && MINI.ptrs.has(e.pointerId)) { mgUp(x, y, e.pointerId); UI.pressed = null; return; }
   const b = hitButton(x, y);
   const was = UI.pressed;
   UI.pressed = null;
@@ -264,7 +271,9 @@ function startSolo() {
 }
 
 function onButton(id) {
+  if (G.screen === 'mini' && mgButton(id)) return;
   switch (id) {
+    case 'mini': mgOpen(); break;
     case 'create': connect(() => send({ t: 'create' })); break;
     case 'quick': connect(() => send({ t: 'quick' })); break;
     case 'solo': G.title.mode = 'solo'; G.title.error = ''; break;
@@ -347,6 +356,8 @@ function frame(now) {
     drawWorld(ctx, cam, vw, vh, { ents: st.ents, blocks: st.blocks, tm: st.tm, me: G.me, myTeam, delivered: L.del, now });
     ctx.drawImage(R.vignette, 0, 0);
     drawHUD(st, L, myTeam, meE);
+  } else if (G.screen === 'mini') {
+    mgFrame(ctx, dt, now, vw, vh);
   } else {
     const st = demoState(now);
     updateFx(dt, st.ents);

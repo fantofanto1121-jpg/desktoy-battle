@@ -134,7 +134,7 @@ function drawTitle(ctx, vw, vh, st) {
   txt(ctx, '机の上のおもちゃ攻防戦', x + cw / 2, y + 2, 10, COL.inkSoft, false, 'c');
   txt(ctx, 'デスクトイ・バトル', x + cw / 2 + 1, y + 24, 22, '#c9bfae', true, 'c');
   txt(ctx, 'デスクトイ・バトル', x + cw / 2, y + 23, 22, COL.ink, true, 'c');
-  txt(ctx, '2対2 / 船が運び、サメが邪魔をする', x + cw / 2, y + 54, 10, COL.inkSoft, false, 'c');
+  txt(ctx, st.mode === 'main' ? '2対2 / 船が運び、サメが邪魔をする' : '本編とミニゲームを順番に遊ぶ', x + cw / 2, y + 54, 10, COL.inkSoft, false, 'c');
 
   const big = UI.big;   // スマホではボタンを大きく
   const bw = big ? Math.min(220, vw - 24) : Math.min(150, vw - 40), bx = Math.floor((vw - bw) / 2);
@@ -156,12 +156,18 @@ function drawTitle(ctx, vw, vh, st) {
     button(ctx, 'diff1', 'ふつう', bx, by + 16 + gap, bw, bh, { band: '#c9a53f' });
     button(ctx, 'diff2', 'つよい', bx, by + 16 + gap * 2, bw, bh, { band: COL.red });
     button(ctx, 'back', '戻る', bx + bw / 2 - (big ? 40 : 30), by + 22 + gap * 3, big ? 80 : 60, big ? 22 : 14, { size: big ? 12 : 10, band: COL.inkSoft });
+  } else if (st.mode === 'main') {
+    button(ctx, 'm_solo', 'ひとりで遊ぶ', bx, by, bw, bh, { band: COL.inkSoft });
+    button(ctx, 'm_quick', 'ランダムマッチ', bx, by + gap, bw, bh, { band: '#c9a53f' });
+    button(ctx, 'm_create', '友達とルームを作る', bx, by + gap * 2, bw, bh, { band: COL.red });
+    button(ctx, 'join', 'ルームに参加', bx, by + gap * 3, bw, bh, { band: COL.blue });
+    button(ctx, 'm_back', '戻る', bx, by + gap * 4, bw, bh, { band: COL.inkSoft });
   } else {
     button(ctx, 'solo', 'ひとりで遊ぶ', bx, by, bw, bh, { band: COL.inkSoft });
     button(ctx, 'quick', 'ランダムマッチ', bx, by + gap, bw, bh, { band: '#c9a53f' });
     button(ctx, 'create', '友達とルームを作る', bx, by + gap * 2, bw, bh, { band: COL.red });
     button(ctx, 'join', 'ルームに参加', bx, by + gap * 3, bw, bh, { band: COL.blue });
-    button(ctx, 'mini', 'ミニゲーム', bx, by + gap * 4, bw, bh, { band: '#7f9a6a' });
+    button(ctx, 'mini', 'ゲームをえらぶ', bx, by + gap * 4, bw, bh, { band: '#7f9a6a' });
   }
   if (st.error) {
     const w = txtW(st.error, 10) + 12;
@@ -399,7 +405,8 @@ function drawResult(ctx, vw, vh, res, isHost, room) {
   for (let k = 0; k < 14; k++) ctx.fillRect(sx + Math.floor(hash2(k, 3) * sw), sy + Math.floor(hash2(k, 9) * 22), 1, 1);
   const bx = x + cw - 104;
   const rh = UI.big ? 26 : 20, rs = UI.big ? 12 : 10;
-  if (room && room.solo) button(ctx, 'soloAgain', 'もう一度', bx, sy - (rh - 20), 94, rh, { band: COL.red, size: rs });
+  if (MINI.party) { const w = MINI.party.ready[0] && MINI.party.online && !MINI.party.alone; button(ctx, 'mgNext', w ? '相手を待つ' : '次のゲームへ', bx, sy - (rh - 20), 94, rh, { band: COL.red, size: rs, disabled: w }); }
+  else if (room && room.solo) button(ctx, 'soloAgain', 'もう一度', bx, sy - (rh - 20), 94, rh, { band: COL.red, size: rs });
   else if (isHost) button(ctx, 'toLobby', 'ロビーに戻る', bx, sy - (rh - 20), 94, rh, { band: COL.red, size: rs });
   else txt(ctx, 'ホストを待っています', bx + 47, sy + 5, 10, COL.inkSoft, false, 'c');
   button(ctx, 'leave', 'タイトルへ', x + cw - (UI.big ? 74 : 64), y + 4, UI.big ? 68 : 58, UI.big ? 20 : 15, { band: COL.inkSoft, size: 10 });

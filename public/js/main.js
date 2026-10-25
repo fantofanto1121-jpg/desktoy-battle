@@ -52,7 +52,9 @@ function connect(then) {
   ws.onopen = then;
   ws.onmessage = ev => onMsg(JSON.parse(ev.data));
   ws.onclose = () => {
+    if (MINI.party && MINI.party.online) MINI.party.alone = true;
     if (G.screen === 'mini') { ws = null; mgNetClosed(); return; }
+    MINI.party = null;
     if (G.screen !== 'title') { G.screen = 'title'; G.title.mode = 'menu'; G.title.error = '接続が切れました'; }
     ws = null;
   };
@@ -277,24 +279,33 @@ function onButton(id) {
   if (G.screen === 'mini' && mgButton(id)) return;
   switch (id) {
     case 'mini': mgOpen(); break;
-    case 'create': connect(() => send({ t: 'create' })); break;
-    case 'quick': connect(() => send({ t: 'quick' })); break;
-    case 'solo': G.title.mode = 'solo'; G.title.error = ''; break;
+    // タイトルの4つは、本編とミニゲームを順番に遊ぶ「いろいろ対戦」
+    case 'create': partyFind('create'); break;
+    case 'quick': partyFind('quick'); break;
+    case 'solo': G.title.mode = 'solo'; G.title.single = false; G.title.error = ''; break;
+    // ゲームをえらぶ画面の本編だけを遊ぶ
+    case 'mainGame': G.screen = 'title'; G.title.mode = 'main'; G.title.error = ''; break;
+    case 'm_create': connect(() => send({ t: 'create' })); break;
+    case 'm_quick': connect(() => send({ t: 'quick' })); break;
+    case 'm_solo': G.title.mode = 'solo'; G.title.single = true; G.title.error = ''; break;
+    case 'm_back': mgOpen(); break;
+    case 'mgNext': partyReady(); break;
     case 'diff0': case 'diff1': case 'diff2': {
       G.diff = +id.slice(4);
       try { localStorage.setItem('dtb-diff', G.diff); } catch (e) {}
-      if (G.screen === 'title') startSolo(); else send({ t: 'diff', diff: G.diff });
+      if (G.screen === 'title') { if (G.title.single) startSolo(); else partyStart(false); } else send({ t: 'diff', diff: G.diff });
       break;
     }
     case 'soloAgain': startSolo(); break;
     case 'join': G.title.mode = 'join'; G.title.code = ''; codeInput.value = ''; G.title.error = ''; if (!G.touch) codeInput.focus(); break;
     case 'codeField': codeInput.focus(); break;
     case 'joinGo': doJoin(); break;
-    case 'back': G.title.mode = 'menu'; codeInput.blur(); break;
+    case 'back': if (G.title.single) { G.title.single = false; G.title.mode = 'main'; } else G.title.mode = 'menu'; codeInput.blur(); break;
     case 'team0': send({ t: 'team', team: 0 }); break;
     case 'team1': send({ t: 'team', team: 1 }); break;
     case 'start': send({ t: 'start' }); break;
     case 'leave':
+      if (MINI.party) partyEnd();
       send({ t: 'leave' }); G.screen = 'title'; G.title.mode = 'menu'; G.room = null;
       if (ws) ws.close();
       break;

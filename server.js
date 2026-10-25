@@ -163,6 +163,18 @@ function handleMg(conn, m) {
       break;
     }
     case 'mgLeave': mgLeave(conn); break;
+    case 'mgMain': {
+      // いろいろ対戦の中の本編: 部屋の2人を別のチームにして、残りはボットで始める
+      const r = conn.mroom;
+      if (!r || !r.started || r.conns[0] !== conn || r.conns.length !== 2) break;
+      for (const c of r.conns) if (c.room) leave(c);
+      const room = newRoom(r.conns[0]);
+      addPlayer(room, r.conns[1], false);
+      room.diff = clampDiff(m.diff);
+      startRoom(room);
+      broadcastRoom(room);
+      break;
+    }
     case 'mg': {
       const r = conn.mroom;
       if (r) for (const c of r.conns) if (c !== conn) send(c.ws, { t: 'mg', d: m.d });
@@ -202,6 +214,7 @@ function handle(conn, m) {
       break;
     }
     case 'join': {
+      if (mrooms.has(String(m.code || '').toUpperCase())) { handleMg(conn, { t: 'mgJoin', code: m.code }); break; }
       const r = rooms.get(String(m.code || '').toUpperCase());
       if (!r) return send(conn.ws, { t: 'err', msg: 'ルームが見つかりません' });
       if (r.phase !== 'lobby') return send(conn.ws, { t: 'err', msg: '試合中のため参加できません' });

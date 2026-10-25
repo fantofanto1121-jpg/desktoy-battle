@@ -317,7 +317,7 @@ function mgSnd(name) {
 // ---------- 画面の流れ ----------
 function mgOpen() { G.screen = 'mini'; MINI.st = 'menu'; MINI.cur = null; MINI.flip = false; mgNetEnd(); }
 function mgStart(g) {
-  mgNetEnd();
+  if (!MINI.party) mgNetEnd();
   MINI.cur = g; MINI.st = 'intro'; MINI.result = null; MGFX.length = 0;
   MINI.shadowExtra = null; MINI.flip = false;
   mgUseStage(g);
@@ -412,7 +412,15 @@ function mgJoinGo() {
   connect(() => send({ t: 'mgJoin', code }));
 }
 function mgNetMsg(m) {
+  if (m.t === 'mgStart' && m.game === 'party') { partyStart(true, m.seed, m.seat); return; }
+  if (m.t === 'mgCpu' && MINI.party) { MINI.net = null; partyStart(false); return; }
+  if (m.t === 'mgErr' && !MINI.net) { G.title.error = m.msg; return; }
+  if (MINI.party && MINI.party.online) {
+    if (m.t === 'mgLeft') { MINI.party.alone = true; if (MINI.party.ready[0]) partyGo(); if (G.screen !== 'mini') return; }
+    if (m.t === 'mg' && m.d && m.d.k === 'nx') { MINI.party.ready[1] = true; if (MINI.party.ready[0]) partyGo(); return; }
+  }
   const n = MINI.net, g = MINI.cur;
+  if (n && m.t === 'mgRoom') { n.code = m.code; n.since = performance.now(); return; }
   if (!n || G.screen !== 'mini' || !g) return;
   if (m.t === 'mgRoom') { n.code = m.code; n.since = performance.now(); }
   else if (m.t === 'mgErr') { n.err = m.msg; MINI.st = 'join'; }
@@ -473,12 +481,15 @@ function mgNetTick(dt) {
 
 function mgButton(id) {
   if (id === 'mgBack') {
+    if (MINI.party) { partyEnd(); return true; }
     if (MINI.st === 'menu') { G.screen = 'title'; G.title.mode = 'menu'; }
     else if (MINI.st === 'wait' || MINI.st === 'join') { mgNetEnd(); codeInput.blur(); MINI.st = 'intro'; }
     else { mgNetEnd(); MINI.st = 'menu'; MINI.cur = null; }
     return true;
   }
-  if (id === 'mgGo') { mgNetEnd(); mgUseStage(MINI.cur); mgPlay(); return true; }
+  if (id === 'mgGo') { if (!MINI.party) mgNetEnd(); mgUseStage(MINI.cur); mgPlay(); return true; }
+  if (id === 'mgNext') { partyReady(); return true; }
+  if (id === 'mgQuit') { partyEnd(); return true; }
   if (id === 'mgAgain') {
     const n = MINI.net;
     if (mgHuman()) { if (!n.again[0]) { n.again[0] = true; mgSendD({ k: 'again' }); mgTryAgain(); } }
@@ -517,6 +528,11 @@ function mgKey(code) { if (MINI.st === 'play' && MINI.cur.key) MINI.cur.key(code
 
 function mgFrame(ctx, dt, now, vw, vh) {
   UI.buttons = [];
+  if (MINI.party && !MINI.cur) {
+    const st = demoState(now); updateFx(dt, st.ents); drawWorld(ctx, updateCamera(null, dt), vw, vh, st); ctx.drawImage(R.vignette, 0, 0);
+    if (MINI.st === 'wait') mgWait(ctx, vw, vh, { name: 'いろいろ対戦' });
+    return;
+  }
   if (MINI.st === 'menu' || !MINI.cur) { mgMenu(ctx, vw, vh, now, dt); return; }
   const g = MINI.cur;
   if (MINI.st === 'play') {
@@ -552,15 +568,21 @@ function mgDiffRow(ctx, x, y, w) {
 function mgIntro(ctx, vw, vh, g) {
   const big = UI.big, cw = Math.min(300, vw - 16);
   const lines = [].concat(...g.howto.map(l => mgWrap(l, cw - 24, 10)));
-  const bh = big ? 28 : 21, nb = g.kind ? (big ? 26 : 20) : 0;
-  const ch = 44 + lines.length * 15 + (g.cpu ? (big ? 32 : 25) : 0) + bh + 9 + (nb ? nb * 2 + 14 : 0);
+  const bh = big ? 28 : 21, nb = g.kind && !MINI.party ? (big ? 26 : 20) : 0;
+  const ch = 44 + lines.length * 15 + (g.cpu && !mgHuman() ? (big ? 32 : 25) : 0) + bh + 9 + (nb ? nb * 2 + 14 : 0);
   const x = Math.floor((vw - cw) / 2), y = Math.max(28, Math.floor((vh - ch) / 2));
   card(ctx, x, y, cw, ch, { ruled: 22 });
   txt(ctx, g.name, x + cw / 2, y + 4, 14, COL.ink, true, 'c');
   let yy = y + 30;
   for (const l of lines) { txt(ctx, l, x + 12, yy, 10, COL.ink, false); yy += 15; }
   yy += 4;
-  if (g.cpu) yy += mgDiffRow(ctx, x + 12, yy, cw - 24) + 8;
+  if (MINI.party) txt(ctx, '第 ' + (MINI.party.idx + 1) + ' 戦', x + cw - 10, y + 6, 10, COL.inkSoft, true, 'r');
+  if (g.cpu && !mgHuman()) yy += mgDiffRow(ctx, x + 12, yy, cw - 24) + 8;
+  if (MINI.party) {
+    const n = MINI.net, waitOp = mgHuman() && n.again[0];
+    button(ctx, mgHuman() ? 'mgAgain' : 'mgGo', waitOp ? '相手を待っています' : 'はじめる', x + 12, yy, cw - 24, bh, { band: COL.red, disabled: waitOp });
+    return;
+  }
   button(ctx, 'mgGo', g.kind ? 'ひとりで遊ぶ' : 'はじめる', x + 12, yy, cw - 24, bh, { band: COL.red });
   if (nb) {
     yy += bh + 6;
@@ -612,6 +634,12 @@ function mgResult(ctx, vw, vh, g) {
   for (const l of r.lines) { txt(ctx, l, x + cw / 2, yy, 10, COL.ink, false, 'c'); yy += 15; }
   yy += 4;
   const bw = Math.floor((cw - 30) / 2), bh = big ? 26 : 20;
+  if (MINI.party) {
+    const w = MINI.party.ready[0] && MINI.party.online && !MINI.party.alone;
+    button(ctx, 'mgNext', w ? '相手を待つ' : '次のゲームへ', x + 10, yy, bw, bh, { band: COL.red, size: big ? 12 : 11, disabled: w });
+    button(ctx, 'mgQuit', 'やめる', x + 20 + bw, yy, bw, bh, { band: COL.inkSoft, size: big ? 12 : 11 });
+    return;
+  }
   const n = MINI.net, waitOp = mgHuman() && n.again[0];
   button(ctx, 'mgAgain', waitOp ? '相手を待つ' : 'もう一度', x + 10, yy, bw, bh, { band: COL.red, size: big ? 12 : 11, disabled: (n && n.st === 'gone') || waitOp });
   button(ctx, 'mgMenu', 'えらぶ', x + 20 + bw, yy, bw, bh, { band: COL.inkSoft, size: big ? 12 : 11 });
@@ -627,6 +655,72 @@ function mgHudNote(ctx, x, y, label, value, col, dark, alignRight) {
   txt(ctx, value, nx + 6, y + 16, 14, COL.ink, true);
 }
 
+// ---------- いろいろ対戦(本編とミニゲームを順番に遊ぶ) ----------
+// 本編のあとにミニゲームを3つ、を繰り返す。ミニゲームの順は種から決めるので、2人とも同じ順になる。
+function partyOrder(seed) {
+  let t = seed >>> 0;
+  const rnd = () => { t = (t + 0x6D2B79F5) >>> 0; let r = Math.imul(t ^ t >>> 15, t | 1); r ^= r + Math.imul(r ^ r >>> 7, r | 61); return ((r ^ r >>> 14) >>> 0) / 4294967296; };
+  const ids = MINI.games.map((g, i) => i);
+  for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+  const out = [];
+  ids.forEach((id, i) => { if (i % 3 === 0 && i < ids.length - 1 - (ids.length - 1) % 3) out.push('main'); out.push(id); });
+  return out;
+}
+// 連戦を始める。online: 2人部屋で遊ぶ(seat は席)
+function partyStart(online, seed, seat) {
+  if (seed === undefined) seed = Math.random() * 1e9 | 0;
+  MINI.party = { online, seat: seat || 0, order: partyOrder(seed), idx: -1, ready: [false, false], alone: false, seed };
+  if (online) MINI.net = { st: 'play', kind: 'party', code: '', since: 0, err: '', wasHuman: true, again: [false, false], snd: [], fx: [], sendT: 0 };
+  partyGo();
+}
+// 待ち画面つきで2人部屋をさがす(kind: quick / create)
+function partyFind(kind) {
+  G.screen = 'mini'; MINI.cur = null; MINI.st = 'wait';
+  MINI.party = { online: false, wait: true, order: [], idx: -1, ready: [false, false] };
+  MINI.net = { st: 'wait', kind, code: '', since: performance.now(), err: '' };
+  connect(() => send(kind === 'quick' ? { t: 'mgQuick', game: 'party' } : { t: 'mgCreate', game: 'party' }));
+}
+// 自分は次へ進む準備ができた(2人とも押したら進む)
+function partyReady() {
+  const P = MINI.party;
+  if (!P) return;
+  if (G.screen === 'game') send({ t: 'leave' });
+  if (!P.online || P.alone) { partyGo(); return; }
+  if (P.ready[0]) return;
+  P.ready[0] = true; mgSendD({ k: 'nx' });
+  if (P.ready[1]) partyGo();
+}
+function partyGo() {
+  const P = MINI.party;
+  P.ready = [false, false]; P.idx++;
+  const id = P.order[P.idx % P.order.length];
+  const online = P.online && !P.alone;
+  if (id === 'main') {
+    MINI.cur = null; MINI.st = 'menu';
+    G.snaps = []; G.offset = null; G.last = null;
+    if (!online) connect(() => send({ t: 'solo', diff: G.diff }));
+    else if (P.seat === 0) send({ t: 'mgMain', diff: G.diff });
+    return;
+  }
+  if (G.screen === 'game') send({ t: 'leave' });
+  G.screen = 'mini';
+  const g = MINI.games[id];
+  if (online) {
+    MINI.seat = P.seat;
+    MINI.net.st = 'play';
+  } else { MINI.net = null; MINI.seat = 0; }
+  mgStart(g);
+  MINI.flip = online && P.seat === 1 && g.kind === 'duel' && !g.noFlip;
+  mgUseStage(g);
+  if (MINI.net) { MINI.net.again = [false, false]; }
+}
+function partyEnd() {
+  if (MINI.net) send({ t: 'mgLeave' });
+  if (G.room) send({ t: 'leave' });
+  MINI.party = null; MINI.net = null; MINI.cur = null; MINI.seat = 0; MINI.flip = false;
+  G.screen = 'title'; G.title.mode = 'menu'; G.room = null;
+}
+
 // ---------- 選ぶ画面 ----------
 function mgMenu(ctx, vw, vh, now, dt) {
   const st = demoState(now);
@@ -636,17 +730,18 @@ function mgMenu(ctx, vw, vh, now, dt) {
   ctx.drawImage(R.vignette, 0, 0);
   const big = UI.big;
   button(ctx, 'mgBack', 'タイトルへ', 6, 6, big ? 84 : 66, big ? 24 : 18, { band: COL.inkSoft, size: big ? 12 : 10 });
-  const n = MINI.games.length;
+  const list = [MAIN_CARD].concat(MINI.games), n = list.length;
   const cols = vw >= 470 ? 5 : vw >= 280 ? 3 : 2;
   const rows = Math.ceil(n / cols);
   const gap = 6, top = 34;
   const cwid = Math.min(big ? 96 : 86, Math.floor((vw - 12 - gap * (cols - 1)) / cols));
   const chei = Math.min(big ? 80 : 70, Math.floor((vh - top - 8 - gap * (rows - 1)) / rows));
   const x0 = Math.floor((vw - (cwid * cols + gap * (cols - 1))) / 2);
-  tape(ctx, 'ミニゲーム', vw / 2, 8, 12, { center: true, pad: 9 });
-  MINI.games.forEach((g, i) => {
+  tape(ctx, 'ゲームをえらぶ', vw / 2, 8, 12, { center: true, pad: 9 });
+  list.forEach((g, i) => {
+    const id = i ? 'mgG' + (i - 1) : 'mainGame';
     const cx = x0 + (i % cols) * (cwid + gap), cy = top + Math.floor(i / cols) * (chei + gap);
-    const hov = UI.hover === 'mgG' + i, down = UI.pressed === 'mgG' + i, oy = down ? 1 : 0;
+    const hov = UI.hover === id, down = UI.pressed === id, oy = down ? 1 : 0;
     card(ctx, cx, cy + oy, cwid, chei, { off: down ? 1 : 3, fill: hov ? '#f8f4ea' : COL.paper });
     ctx.fillStyle = g.tint || COL.red; ctx.fillRect(cx, cy + oy, cwid - 1, 3);
     const ic = g.icon ? g.icon() : null;
@@ -658,9 +753,15 @@ function mgMenu(ctx, vw, vh, now, dt) {
       ctx.restore();
     }
     txt(ctx, g.name, cx + cwid / 2, cy + chei - 15 + oy, 10, COL.ink, true, 'c');
-    UI.buttons.push({ id: 'mgG' + i, x: cx, y: cy, w: cwid, h: chei });
+    UI.buttons.push({ id, x: cx, y: cy, w: cwid, h: chei });
   });
 }
+
+// 本編(船とサメ)のカード
+const MAIN_CARD = {
+  name: '船とサメ', tint: COL.blue,
+  icon() { return mgIcon('main', 84, 52, (put) => { put(SPR.boat(0, 4, 0, 2), -0.9, 0.5, 0); put(SPR.shark(1, 20, 0, 0, 0), 1.0, -0.4, 0); }); },
+};
 
 // アイコン: 舞台なしで物体を小さく並べた絵を焼いて保存
 function mgIcon(key, w, h, draw) {

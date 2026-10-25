@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>デスクトイ・バトル</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #6b4b2c; touch-action: none; -webkit-user-select: none; user-select: none; }
+  #game { display: block; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
+  #text { position: fixed; left: 0; top: 0; pointer-events: none; }
+  #code { position: fixed; left: 50%; top: 40%; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<canvas id="text"></canvas>
+<input id="code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false">
+<script src="/shared/config.js?v=4"></script>
+<script src="js/sprites.js?v=4"></script>
+<script src="js/render.js?v=4"></script>
+<script src="js/audio.js?v=4"></script>
+<script src="js/ui.js?v=4"></script>
+<script src="js/main.js?v=4"></script>
+</body>
+</html>

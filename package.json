@@ -1,0 +1,17 @@
+{
+  "name": "desktoy-battle",
+  "version": "1.0.0",
+  "description": "机の上のおもちゃ攻防戦(2対2オンライン)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "ws": "^8.22.0"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -39,7 +39,7 @@ function send(ws, o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o))
 function makeCode() {
   const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   let c;
-  do { c = ''; for (let i = 0; i < 4; i++) c += A[Math.random() * A.length | 0]; } while (rooms.has(c));
+  do { c = ''; for (let i = 0; i < 4; i++) c += A[Math.random() * A.length | 0]; } while (rooms.has(c) || mrooms.has(c));
   return c;
 }
 
@@ -120,8 +120,60 @@ function leave(conn) {
   broadcastRoom(room);
 }
 
+// ---------- ミニゲームの部屋(2人。中身は2人の間で中継するだけ) ----------
+const mrooms = new Map();
+const MG_WAIT = 20000;   // ランダムマッチでこの時間だれも来なければ CPU と遊ぶ
+
+function mgLeave(conn) {
+  const r = conn.mroom;
+  if (!r) return;
+  conn.mroom = null;
+  r.conns = r.conns.filter(c => c !== conn);
+  for (const c of r.conns) send(c.ws, { t: 'mgLeft' });
+  if (!r.conns.length || r.started) { for (const c of r.conns) c.mroom = null; mrooms.delete(r.code); clearTimeout(r.timer); }
+}
+function mgNewRoom(conn, game, pub) {
+  const r = { code: makeCode(), game: String(game).slice(0, 20), pub, conns: [conn], started: false, timer: null };
+  mrooms.set(r.code, r);
+  conn.mroom = r;
+  send(conn.ws, { t: 'mgRoom', code: r.code, pub });
+  if (pub) r.timer = setTimeout(() => { if (!r.started) { send(conn.ws, { t: 'mgCpu' }); mgLeave(conn); } }, MG_WAIT);
+  return r;
+}
+function mgBegin(r) {
+  r.started = true; clearTimeout(r.timer);
+  const seed = Math.random() * 1e9 | 0;
+  r.conns.forEach((c, i) => send(c.ws, { t: 'mgStart', seat: i, seed, game: r.game }));
+}
+function handleMg(conn, m) {
+  switch (m.t) {
+    case 'mgCreate': mgLeave(conn); mgNewRoom(conn, m.game, false); break;
+    case 'mgQuick': {
+      mgLeave(conn);
+      const r = [...mrooms.values()].find(q => q.pub && !q.started && q.game === String(m.game) && q.conns.length === 1);
+      if (r) { r.conns.push(conn); conn.mroom = r; mgBegin(r); }
+      else mgNewRoom(conn, m.game, true);
+      break;
+    }
+    case 'mgJoin': {
+      const r = mrooms.get(String(m.code || '').toUpperCase());
+      if (!r || r.pub || r.started || r.conns.length !== 1) { send(conn.ws, { t: 'mgErr', msg: 'その部屋は見つかりません' }); break; }
+      mgLeave(conn);
+      r.conns.push(conn); conn.mroom = r; mgBegin(r);
+      break;
+    }
+    case 'mgLeave': mgLeave(conn); break;
+    case 'mg': {
+      const r = conn.mroom;
+      if (r) for (const c of r.conns) if (c !== conn) send(c.ws, { t: 'mg', d: m.d });
+      break;
+    }
+  }
+}
+
 function handle(conn, m) {
   const room = conn.room;
+  if (typeof m.t === 'string' && m.t.startsWith('mg')) { handleMg(conn, m); return; }
   switch (m.t) {
     case 'create': {
       if (room) leave(conn);
@@ -204,13 +256,13 @@ function handle(conn, m) {
 }
 
 wss.on('connection', ws => {
-  const conn = { id: nextId++, ws, room: null };
+  const conn = { id: nextId++, ws, room: null, mroom: null };
   ws.on('message', raw => {
     let m;
     try { m = JSON.parse(raw); } catch (e) { return; }
     handle(conn, m);
   });
-  ws.on('close', () => leave(conn));
+  ws.on('close', () => { leave(conn); mgLeave(conn); });
 });
 
 // ---------- 地形・当たり判定 ----------

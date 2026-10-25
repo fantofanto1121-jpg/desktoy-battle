@@ -34,14 +34,14 @@
   // 付箋の焼き込み。flip: 0 伏せ ... 4 表
   const noteSpr = (pic, flip) => mgSpr('mn' + pic + '|' + flip, () => {
     const a = flip / 4 * Math.PI, sink = -(NS / 2 * Math.abs(Math.sin(a)) + (flip > 2 ? 0.07 * Math.abs(Math.cos(a)) : 0));   // 地面より下に回った分を持ち上げる
-    return bake(mgModel('mNote' + pic, () => noteModel(pic)), { roll: a, sink });
+    return mgBake(mgModel('mNote' + pic, () => noteModel(pic)), { roll: a, sink });
   });
 
   const G_ = {
-    name: '付箋の神経衰弱', tint: '#d9b350', cpu: true,
+    name: '付箋の神経衰弱', tint: '#d9b350', cpu: true, kind: 'duel',
     howto: [
       '伏せた付箋を2枚めくって、同じ絵ならもらえます。',
-      'そろえたらもう一度。はずれたらCPUの番です。',
+      'そろえたらもう一度。はずれたら相手の番です。',
       '多くそろえたほうの勝ち。',
     ],
     stageDef() {
@@ -78,13 +78,18 @@
       if (this.open.length === 2) this.wait = 1.0;
     },
     down(sx, sy) {
-      if (this.turn !== 0 || this.wait > 0 || this.open.length >= 2) return;
+      if (this.turn !== MINI.seat || this.wait > 0 || this.open.length >= 2) return;
       const [x, y] = mgToWorld(sx, sy, TOPZ);
       for (const c of this.cards) {
         if (c.up || c.owner >= 0) continue;
         const [cx, cy] = this.pos(c);
-        if (Math.abs(x - cx) < NS / 2 + 0.1 && Math.abs(y - cy) < NS / 2 + 0.1) { this.flip(c); return; }
+        if (Math.abs(x - cx) < NS / 2 + 0.1 && Math.abs(y - cy) < NS / 2 + 0.1) { mgInput({ i: c.i }); return; }
       }
+    },
+    onAct(seat, a) {
+      const c = this.cards[a.i | 0];
+      if (this.turn !== seat || this.wait > 0 || this.open.length >= 2 || !c || c.up || c.owner >= 0) return;
+      this.flip(c);
     },
     cpuPick() {
       const live = this.cards.filter(c => c.owner < 0 && !c.up);
@@ -101,12 +106,15 @@
       const pool = unk.length ? unk : live;
       return pool[Math.floor(Math.random() * pool.length)];
     },
-    update(dt) {
+    anim(dt) {
       for (const c of this.cards) {
         const target = c.up || c.owner >= 0 ? 4 : 0;
         c.f += Math.sign(target - c.f) * Math.min(Math.abs(target - c.f), dt * 16);
         if (c.owner >= 0 && c.f >= 4) c.fly = Math.min(1, c.fly + dt * 2.2);
       }
+    },
+    update(dt) {
+      this.anim(dt);
       if (this.wait > 0) {
         this.wait -= dt;
         if (this.wait <= 0 && this.open.length === 2) {
@@ -115,22 +123,30 @@
           if (a.pic === b.pic) {
             for (const c of [a, b]) { c.owner = this.turn; c.pile = this.score[this.turn]; this.mem.delete(c.i); }
             this.score[this.turn]++;
-            mgSnd('good');
+            mgSnd(this.turn === MINI.seat ? 'good' : 'bad');
           } else {
             a.up = b.up = false; this.turn = 1 - this.turn; this.cpuT = 0.8;
             mgSnd('soft');
           }
           if (this.cards.every(c => c.owner >= 0)) {
-            const [p, q] = this.score;
-            mgFinish({ head: p > q ? 'かち' : p < q ? 'まけ' : '引き分け', lines: ['あなた ' + p + ' 組  /  CPU ' + q + ' 組'], good: p >= q });
+            const S = this.score;
+            mgFinish((seat) => { const p = S[seat], q = S[1 - seat]; return { head: p > q ? 'かち' : p < q ? 'まけ' : '引き分け', lines: ['あなた ' + p + ' 組  /  ' + mgVs(seat) + ' ' + q + ' 組'], good: p >= q }; });
           }
         }
       }
-      if (this.turn === 1 && this.wait <= 0 && this.open.length < 2) {
+      if (mgCpu(this.turn) && this.wait <= 0 && this.open.length < 2) {
         this.cpuT -= dt;
         if (this.cpuT <= 0) { const c = this.cpuPick(); if (c) this.flip(c); this.cpuT = 0.7; }
       }
     },
+    snap() {
+      return { c: this.cards.map(c => [c.pic, c.up ? 1 : 0, c.owner, c.pile]), tu: this.turn, w: this.wait, sc: this.score, o: this.open.map(c => c.i) };
+    },
+    apply(s) {
+      s.c.forEach((a, i) => { const c = this.cards[i]; c.pic = a[0]; c.up = !!a[1]; c.owner = a[2]; c.pile = a[3]; });
+      this.turn = s.tu; this.wait = s.w; this.score = s.sc; this.open = s.o.map(i => this.cards[i]);
+    },
+    guest(dt) { this.anim(dt); },
     draw(ctx, vw, vh) {
       mgCamera(vw, vh, 0, 0, 0, 10);
       const objs = [];
@@ -141,12 +157,12 @@
         if (f > 0 && f < 4) z += 0.3 * Math.sin(c.f / 4 * Math.PI);
         if (c.owner >= 0) {
           // 取った札は自分の側(左手前 / 右奥)へ重ねる
-          const px = c.owner === 0 ? -o : o, py = c.owner === 0 ? o - 1 : -o + 1, pz = 0.08 * c.pile;
+          const mine = c.owner === 0, px = mine ? -o : o, py = mine ? o - 1 : -o + 1, pz = 0.08 * c.pile;
           const u = c.fly, e = u * u * (3 - 2 * u);
           x = x + (px - x) * e; y = y + (py - y) * e; z = z + (pz - z) * e + Math.sin(u * Math.PI) * 1.4;
         }
-        const hov = this.turn === 0 && UI.hover === null && !c.up && c.owner < 0 && this.hit === c;
-        objs.push({ s: noteSpr(c.pic, f), x, y, z: z + (hov ? 0.12 : 0), g: TOPZ, k: x + y + z });
+        const hov = this.turn === MINI.seat && UI.hover === null && !c.up && c.owner < 0 && this.hit === c;
+        objs.push({ s: noteSpr(c.pic, f), x, y, z: z + (hov ? 0.12 : 0), g: TOPZ, k: mgDepth(x, y) + z });
       }
       mgDraw(ctx, vw, vh, objs);
     },
@@ -156,9 +172,10 @@
       for (const c of this.cards) { const [cx, cy] = this.pos(c); if (Math.abs(x - cx) < NS / 2 && Math.abs(y - cy) < NS / 2) this.hit = c; }
     },
     hud(ctx, vw, vh) {
-      mgHudNote(ctx, 6, 30, 'あなた', this.score[0] + ' 組', COL.noteR, COL.noteRDark);
-      mgHudNote(ctx, vw - 6, 30, 'CPU', this.score[1] + ' 組', COL.noteB, COL.noteBDark, true);
-      mgHudTag(ctx, vw, this.turn === 0 ? 'あなたの番' : 'CPUの番');
+      const me = MINI.seat;
+      mgHudNote(ctx, 6, 30, mgName(me), this.score[me] + ' 組', me ? COL.noteB : COL.noteR, me ? COL.noteBDark : COL.noteRDark);
+      mgHudNote(ctx, vw - 6, 30, mgName(1 - me), this.score[1 - me] + ' 組', me ? COL.noteR : COL.noteB, me ? COL.noteRDark : COL.noteBDark, true);
+      mgHudTag(ctx, vw, this.turn === me ? 'あなたの番' : mgName(1 - me) + 'の番');
     },
   };
   mgRegister(G_);

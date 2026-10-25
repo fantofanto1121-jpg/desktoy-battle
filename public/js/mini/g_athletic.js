@@ -118,10 +118,10 @@
       origin: [-0.35 * RS, -0.31 * RS, 0],
     });
   }
-  const robo = (yaw, pose) => mgSpr('robo' + SPR.yawIndex(yaw) + '|' + pose, () => bake(mgModel('robo' + pose, () => robotModel(pose)), { yaw: SPR.yawIndex(yaw) / SPR.YAWS * Math.PI * 2 }));
+  const robo = (yaw, pose) => mgSpr('robo' + SPR.yawIndex(yaw) + '|' + pose, () => mgBake(mgModel('robo' + pose, () => robotModel(pose)), { yaw: SPR.yawIndex(yaw) / SPR.YAWS * Math.PI * 2 }));
   window.mgRobot = robo;   // 画鋲よけでも使う
-  const mpSpr = () => mgSpr('athMp', () => bake(mgModel('athMp', () => mgEraserModel(MP.s, MP.s, MP.h, 'sleeve', 'sleeveW')), {}));
-  const flagSpr = () => mgSpr('athFlag', () => bake(mgModel('athFlag', () => makeModel({
+  const mpSpr = () => mgSpr('athMp', () => mgBake(mgModel('athMp', () => mgEraserModel(MP.s, MP.s, MP.h, 'sleeve', 'sleeveW')), {}));
+  const flagSpr = () => mgSpr('athFlag', () => mgBake(mgModel('athFlag', () => makeModel({
     size: [0.1, 0.9, 1.5], vs: 0.04, origin: [-0.05, -0.05, 0],
     fill(x, y, z) {
       if (Math.abs(x) < 0.04 && Math.abs(y) < 0.04) return M.pWood;
@@ -136,7 +136,7 @@
   }
 
   const G_ = {
-    name: '文具アスレチック', tint: '#7f9a6a',
+    name: '文具アスレチック', tint: '#7f9a6a', kind: 'race',
     howto: [
       'ぜんまい人形を動かして、文具の足場を跳び移ります。',
       '奥の缶の旗まで行けばゴール。落ちたら前の場所から。',
@@ -158,7 +158,7 @@
       return g;
     },
     reset() {
-      this.p = { x: 25.6, y: 25.6, z: PL[0].top, vx: 0, vy: 0, vz: 0, yaw: Math.PI * 1.25, walk: 0, air: 0 };
+      this.p = { x: 25.6, y: 25.6, z: PL[0].top, vx: 0, vy: 0, vz: 0, yaw: Math.PI, walk: 0, air: 0 };
       this.cp = PL[0].cp; this.lastTop = PL[0].top; this.falls = 0; this.fade = 0; this.jq = 0; this.jUsed = 0;
       this.mpT = 0; this.done = false; this.camX = null;
       mgPadReset();
@@ -208,17 +208,19 @@
         const goal = PL[PL.length - 1];
         if (inP(goal, p.x, p.y) && Math.abs(goal.top - g) < 0.01 && !this.done) {
           this.done = true;
-          mgFinish({ head: 'ゴール', lines: ['タイム ' + MINI.t.toFixed(1) + ' 秒', '落ちた回数 ' + this.falls], good: true });
+          mgFinish({ head: 'ゴール', score: +MINI.t.toFixed(1), unit: ' 秒', low: true, lines: ['タイム ' + MINI.t.toFixed(1) + ' 秒', '落ちた回数 ' + this.falls], good: true });
         }
       }
       if (p.z < this.lastTop - 1.4) { this.falls++; this.fade = 0.6; mgSnd('fall'); }
       const sp = Math.hypot(p.vx, p.vy);
       p.walk += dt * (onG && sp > 0.5 ? sp * 2.4 : 0);
     },
+    prog() { const p = this.p; return { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), yaw: +p.yaw.toFixed(2), w: +p.walk.toFixed(1), air: p.air > 0.05 ? 1 : 0 }; },
+    cpuScore() { return +(mgLv(50, 36, 27) + Math.random() * 8).toFixed(1); },
     idle(dt) { this.mpT += dt; MP.y = 8.8 + Math.sin(this.mpT * 1.1) * 0.55; },
     draw(ctx, vw, vh) {
       const p = this.p;
-      const tx = toSX(p.x, p.y), ty = toSY(p.x, p.y, p.z);
+      const [tx, ty] = mgScreen(p.x, p.y, p.z);
       if (this.camX === null) { this.camX = tx; this.camY = ty; }
       this.camX += (tx - this.camX) * 0.12; this.camY += (ty - this.camY) * 0.12;
       MINI.cam.ox = Math.round(vw / 2 - this.camX); MINI.cam.oy = Math.round(vh / 2 - this.camY + 14);
@@ -227,10 +229,12 @@
       const alpha = this.fade > 0 ? Math.max(0, (this.fade - 0.25) / 0.35) : 1;
       const goal = PL[PL.length - 1];
       const objs = [
-        { s: mpSpr(), x: MP.x, y: MP.y, z: MP.top - MP.h, g: this.ground(MP.x, MP.y + 1.5) > 0 ? 0 : 0, k: MP.x + MP.y },
+        { s: mpSpr(), x: MP.x, y: MP.y, z: MP.top - MP.h, g: 0 },
         { s: flagSpr(), x: (goal.x0 + goal.x1) / 2, y: (goal.y0 + goal.y1) / 2, z: goal.top, g: goal.top },
         { s: robo(p.yaw, pose), x: p.x, y: p.y, z: p.z, g, a: alpha, k: 1e4 },
       ];
+      const op = mgHuman() && MINI.net.op;
+      if (op) { const q = Math.floor(op.w) % 4; objs.push({ s: robo(op.yaw, op.air ? 1 : q === 1 ? 1 : q === 3 ? 2 : 0), x: op.x, y: op.y, z: op.z, g: this.ground(op.x, op.y), a: 0.4, ns: true, k: 1e4 - 1 }); }
       mgDraw(ctx, vw, vh, objs, (c) => mgFxDraw(c));
     },
     hud(ctx, vw, vh) {

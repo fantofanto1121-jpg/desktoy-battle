@@ -19,7 +19,7 @@
       },
     });
   }
-  const tack = (c, up) => mgSpr('tk' + c + (up ? 'u' : 'd'), () => bake(mgModel('tk' + c + (up ? 'u' : 'd'), () => tackModel(MATS[c], up)), { yaw: 0.5 }));
+  const tack = (c, up) => mgSpr('tk' + c + (up ? 'u' : 'd'), () => mgBake(mgModel('tk' + c + (up ? 'u' : 'd'), () => tackModel(MATS[c], up)), { yaw: 0.5 }));
   const goldClip = () => mgSpr('tkGold', () => {
     const m = mgModel('tkGoldM', () => makeModel(mgScale({
       size: [0.9, 0.5, 0.1], vs: 0.035, smooth: 1.3,
@@ -29,11 +29,11 @@
         return ring(0.25, 0.2) || ring(0.17, 0.1) ? M.gold : 0;
       },
     }, 1.7)));
-    return bake(m, { yaw: 0.8 });
+    return mgBake(m, { yaw: 0.8 });
   });
 
   const G_ = {
-    name: '画鋲よけ', tint: '#c45c4a',
+    name: '画鋲よけ', tint: '#c45c4a', kind: 'race',
     howto: [
       '上から画鋲が降ってきます。影の輪から逃げよう。',
       '落ちた画鋲は針が上。しばらく踏まないように。',
@@ -73,14 +73,14 @@
       // 時間がたつほど多く降る
       this.spawnT -= dt;
       if (this.spawnT <= 0) {
-        const n = 1 + Math.floor(t / 20) + (Math.random() < 0.3 ? 1 : 0);
+        const n = 1 + Math.floor(t / 20) + (mgRand() < 0.3 ? 1 : 0);
         for (let k = 0; k < n; k++) {
           // 半分はプレイヤーの近くをねらう
-          const near = Math.random() < 0.5;
-          const x = near ? p.x + (Math.random() - 0.5) * 3 : 0.6 + Math.random() * 10.8, y = near ? p.y + (Math.random() - 0.5) * 3 : 0.6 + Math.random() * 10.8;
-          this.tacks.push({ x: Math.max(0.5, Math.min(11.5, x)), y: Math.max(0.5, Math.min(11.5, y)), z: 9, vz: -2, c: Math.floor(Math.random() * 3), up: false, life: 3.2, warn: 0 });
+          const near = mgRand() < 0.5;
+          const x = near ? p.x + (mgRand() - 0.5) * 3 : 0.6 + mgRand() * 10.8, y = near ? p.y + (mgRand() - 0.5) * 3 : 0.6 + mgRand() * 10.8;
+          this.tacks.push({ x: Math.max(0.5, Math.min(11.5, x)), y: Math.max(0.5, Math.min(11.5, y)), z: 9, vz: -2, c: Math.floor(mgRand() * 3), up: false, life: 3.2, warn: 0 });
         }
-        this.spawnT = Math.max(0.35, 1.1 - t * 0.012) * (0.7 + Math.random() * 0.6);
+        this.spawnT = Math.max(0.35, 1.1 - t * 0.012) * (0.7 + mgRand() * 0.6);
       }
       for (let i = this.tacks.length - 1; i >= 0; i--) {
         const k = this.tacks[i];
@@ -106,10 +106,10 @@
       p.walk += dt * Math.hypot(p.vx, p.vy) * 2.4;
       // 金のクリップ
       this.goldT -= dt;
-      if (!this.gold && this.goldT <= 0) this.gold = { x: 1 + Math.random() * 10, y: 1 + Math.random() * 10, t: 0 };
+      if (!this.gold && this.goldT <= 0) this.gold = { x: 1 + mgRand() * 10, y: 1 + mgRand() * 10, t: 0 };
       if (this.gold) {
         this.gold.t += dt;
-        if (Math.hypot(this.gold.x - p.x, this.gold.y - p.y) < 0.7) { this.clips++; mgSnd('good'); mgBurst(this.gold.x, this.gold.y, 0.4, 6, '#e2c35a', 1.5); this.gold = null; this.goldT = 2 + Math.random() * 2; }
+        if (Math.hypot(this.gold.x - p.x, this.gold.y - p.y) < 0.7) { this.clips++; mgSnd('good'); mgBurst(this.gold.x, this.gold.y, 0.4, 6, '#e2c35a', 1.5); this.gold = null; this.goldT = 2 + mgRand() * 2; }
         else if (this.gold.t > 7) { this.gold = null; this.goldT = 1; }
       }
     },
@@ -122,15 +122,19 @@
       if (this.lives <= 0) {
         this.dead = true;
         const sc = Math.floor(MINI.t) + this.clips * 5;
-        mgFinish({ head: sc + ' 点', lines: ['よけた時間 ' + MINI.t.toFixed(1) + ' 秒', '金のクリップ ' + this.clips + ' 個'], good: true });
+        mgFinish({ head: sc + ' 点', score: sc, unit: ' 点', lines: ['よけた時間 ' + MINI.t.toFixed(1) + ' 秒', '金のクリップ ' + this.clips + ' 個'], good: true });
       }
     },
+    prog() { const p = this.p; return { x: +p.x.toFixed(2), y: +p.y.toFixed(2), yaw: +p.yaw.toFixed(2), w: +p.walk.toFixed(1), s: (Math.floor(MINI.t) + this.clips * 5) + ' 点' }; },
+    cpuScore() { return Math.round(mgLv(20, 38, 60) + Math.random() * mgLv(15, 20, 25)); },
     draw(ctx, vw, vh) {
       mgCamera(vw, vh, 6, 6, FL, 8);
       const p = this.p, objs = [];
       const pose = Math.floor(p.walk) % 4 === 1 ? 1 : Math.floor(p.walk) % 4 === 3 ? 2 : 0;
       const blink = p.imm > 0 && Math.floor(p.imm * 10) % 2 === 0;
       objs.push({ s: window.mgRobot(p.yaw, pose), x: p.x, y: p.y, z: FL, g: FL, a: blink ? 0.35 : 1 });
+      const op = mgHuman() && MINI.net.op;
+      if (op) { const q = Math.floor(op.w) % 4; objs.push({ s: window.mgRobot(op.yaw, q === 1 ? 1 : q === 3 ? 2 : 0), x: op.x, y: op.y, z: FL, g: FL, a: 0.4, ns: true }); }
       for (const k of this.tacks) objs.push({ s: tack(k.c, k.up), x: k.x, y: k.y, z: k.up ? FL : k.z, g: FL, ns: k.z > 2.5, a: k.up && k.life < 0.6 ? k.life / 0.6 : 1 });
       if (this.gold) objs.push({ s: goldClip(), x: this.gold.x, y: this.gold.y, z: FL + 0.15 + Math.sin(this.gold.t * 4) * 0.08, g: FL, a: this.gold.t > 5.5 && Math.floor(this.gold.t * 8) % 2 ? 0.4 : 1 });
       mgDraw(ctx, vw, vh, objs, (c) => {

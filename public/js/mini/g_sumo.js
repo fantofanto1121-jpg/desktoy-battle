@@ -28,17 +28,16 @@
       },
     }, 1.3));
   }
-  const D = [Math.SQRT1_2, -Math.SQRT1_2];   // 取組の向き(画面の横)
   // lean: 前後の傾き、side: 左右のゆれ
   const wSpr = (team, lean, side) => mgSpr('sm' + team + '|' + lean + '|' + side, () => {
-    const yaw = team ? Math.PI * 0.75 : -Math.PI / 4, pitch = lean * 0.12;
-    return bake(mgModel('smW' + team, () => wrestlerModel(team)), { yaw, pitch, roll: side * 0.2, sink: -Math.abs(lean) * 0.05 - Math.abs(side) * 0.1 });
+    const yaw = team ? Math.PI : 0, pitch = lean * 0.12;
+    return mgBake(mgModel('smW' + team, () => wrestlerModel(team)), { yaw, pitch, roll: side * 0.2, sink: -Math.abs(lean) * 0.05 - Math.abs(side) * 0.1 });
   });
 
   const G_ = {
-    name: '紙ずもう', tint: '#a4564a', cpu: true,
+    name: '紙ずもう', tint: '#a4564a', cpu: true, kind: 'duel',
     howto: [
-      '画面をタップ(Space)すると土俵がトンと鳴り、赤の力士が前へ出ます。',
+      '画面をタップ(Space)すると土俵がトンと鳴り、自分の力士が前へ出ます。',
       '速くたたきすぎるとぐらついて倒れます。リズムよく。',
       '相手を押し出すか倒せば勝ち。先に2勝で勝利です。',
     ],
@@ -50,7 +49,7 @@
             const r = Math.hypot(x, y);
             let col = mgTone(['#d4b083', '#c6a173', '#b28d61', '#9d7a51'].map(hexRGB), 0.9 + (vnoise(x * 3, y * 0.6) - 0.5) * 0.9 + (r < RING ? -0.4 : 0.3), px, py);
             if (Math.abs(r - RING) < 0.07 || Math.abs(r - RING - 0.2) < 0.04) col = hexRGB('#f1ece0');
-            if (Math.abs(Math.abs(x - y) / Math.SQRT2 - 0.75) < 0.05 && Math.abs(x + y) / Math.SQRT2 < 0.5) col = hexRGB('#f1ece0');   // 仕切り線
+            if (Math.abs(Math.abs(x) - 0.75) < 0.05 && Math.abs(y) < 0.5) col = hexRGB('#f1ece0');   // 仕切り線
             if (Math.abs(Math.max(Math.abs(x), Math.abs(y)) - 4.0) < 0.04) col = hexRGB('#8d6d47');
             return col;
           },
@@ -64,7 +63,7 @@
     newBout() {
       const mk = (team) => ({ team, x: team ? 1.3 : -1.3, y: 0, v: 0, tilt: 0, tv: 0, fallen: 0, side: 0 });
       this.w = [mk(0), mk(1)];
-      this.state = 'ready'; this.t = 0; this.msg = this.bout === 0 ? 'はっけよい' : '次の取組'; this.msgT = 1.3;
+      this.state = 'ready'; this.t = 0; this.msg = this.bout === 0 ? 'はっけよい' : '次の取組'; this.msgT = 1.3; this.win = -1;
       this.cpuT = 0.6; this.shake = 0; this.taps = [];
     },
     tap(i) {
@@ -76,14 +75,16 @@
       this.taps[i] = now;
       w.tv += dir * 0.5 + (Math.random() - 0.5) * (gap < 0.16 ? 5 : gap < 0.24 ? 2.4 : 1.2);
       this.shake = 0.08;
-      if (i === 0) mgSnd('tap');
+      if (i === MINI.seat) mgSnd('tap');
     },
-    down() { this.tap(0); },
-    key(code) { if (code === 'Space' || code === 'Enter') this.tap(0); },
+    onAct(seat) { this.tap(seat); },
+    press() { if (!mgHost() && this.state === 'fight') mgSnd('tap'); mgInput({ t: 1 }); },
+    down() { this.press(); },
+    key(code) { if (code === 'Space' || code === 'Enter') this.press(); },
     update(dt) {
       this.msgT -= dt; this.shake -= dt;
       if (this.state === 'ready') { if (this.msgT <= 0) this.state = 'fight'; return; }
-      if (this.state === 'fight') {
+      if (this.state === 'fight' && mgCpu(1)) {
         this.cpuT -= dt;
         if (this.cpuT <= 0) { this.tap(1); this.cpuT = mgLv(0.36, 0.27, 0.215) * (0.8 + Math.random() * 0.45); }
       }
@@ -112,36 +113,46 @@
           this.state = 'end'; this.endT = 1.6;
           const win = 1 - loser;
           this.wins[win]++;
-          this.msg = (win === 0 ? 'あなたの勝ち  ' : 'CPUの勝ち  ') + why; this.msgT = 1.6;
-          mgSnd(win === 0 ? 'good' : 'bad');
+          this.win = win; this.msg = why; this.msgT = 1.6;
+          mgSnd(win === MINI.seat ? 'good' : 'bad');
         }
       } else if (this.state === 'end') {
         this.endT -= dt;
         if (this.endT <= 0) {
           if (this.wins[0] >= BOUTS || this.wins[1] >= BOUTS) {
-            const p = this.wins[0], q = this.wins[1];
-            mgFinish({ head: p > q ? 'かち' : 'まけ', lines: ['あなた ' + p + ' 勝  /  CPU ' + q + ' 勝'], good: p > q });
+            const W = this.wins;
+            mgFinish((seat) => ({ head: W[seat] > W[1 - seat] ? 'かち' : 'まけ', lines: ['あなた ' + W[seat] + ' 勝  /  ' + mgVs(seat) + ' ' + W[1 - seat] + ' 勝'], good: W[seat] > W[1 - seat] }));
             this.state = 'done';
           } else { this.bout++; this.newBout(); }
         }
       }
     },
+    snap() {
+      return { w: this.w.map(w => [w.x, w.v, w.tilt, w.fallen, w.side].map(v => Math.round(v * 1000) / 1000)), st: this.state, m: this.msg, mt: this.msgT, wi: this.wins, win: this.win, sh: this.shake };
+    },
+    apply(s) {
+      s.w.forEach((a, i) => { const w = this.w[i]; [w.x, w.v, w.tilt, w.fallen, w.side] = a; });
+      this.state = s.st; this.msg = s.m; this.msgT = s.mt; this.wins = s.wi; this.win = s.win; this.shake = s.sh;
+    },
+    guest(dt) { this.msgT -= dt; this.shake -= dt; },
     draw(ctx, vw, vh) {
       const sh = this.shake > 0 ? 1 : 0;
       mgCamera(vw, vh, 0, 0, TOP, 10 + sh);
       const objs = this.w.map(w => {
         const lean = w.fallen ? Math.sign(w.tilt || 1) * (w.team ? -1 : 1) * Math.round(w.fallen + 1) * 2 : Math.max(-3, Math.min(3, Math.round(w.tilt * (w.team ? -1 : 1) * 2.4)));
-        return { s: wSpr(w.team, Math.max(-9, Math.min(9, lean)), Math.round(w.side)), x: w.x * D[0], y: w.x * D[1], z: TOP + (this.shake > 0.04 ? 0.08 : 0), g: TOP };
+        return { s: wSpr(w.team, Math.max(-9, Math.min(9, lean)), Math.round(w.side)), x: w.x, y: 0, z: TOP + (this.shake > 0.04 ? 0.08 : 0), g: TOP };
       });
       mgDraw(ctx, vw, vh, objs);
     },
     hud(ctx, vw, vh) {
-      mgHudNote(ctx, 6, 30, 'あなた', this.wins[0] + ' 勝', COL.noteR, COL.noteRDark);
-      mgHudNote(ctx, vw - 6, 30, 'CPU', this.wins[1] + ' 勝', COL.noteB, COL.noteBDark, true);
-      if (this.msgT > 0) centerCard(ctx, vw, vh, [[this.msg, 14, COL.ink, true]], { up: 70 });
+      const me = MINI.seat;
+      mgHudNote(ctx, 6, 30, mgName(me), this.wins[me] + ' 勝', me ? COL.noteB : COL.noteR, me ? COL.noteBDark : COL.noteRDark);
+      mgHudNote(ctx, vw - 6, 30, mgName(1 - me), this.wins[1 - me] + ' 勝', me ? COL.noteR : COL.noteB, me ? COL.noteRDark : COL.noteBDark, true);
+      const msg = this.win >= 0 ? (this.win === me ? 'あなたの勝ち  ' : mgName(1 - me) + 'の勝ち  ') + this.msg : this.msg;
+      if (this.msgT > 0) centerCard(ctx, vw, vh, [[msg, 14, COL.ink, true]], { up: 70 });
       else mgHudTag(ctx, vw, G.touch ? '画面をトントンたたく' : 'Space / クリックでトン');
       // ぐらつきの目安
-      const w = this.w[0], k = Math.min(1, Math.abs(w.tilt) / 1.15);
+      const w = this.w[me], k = Math.min(1, Math.abs(w.tilt) / 1.15);
       const bx = Math.floor(vw / 2 - 40), by = vh - 18;
       card(ctx, bx - 4, by - 4, 88, 14, {});
       ctx.fillStyle = '#d8d0bf'; ctx.fillRect(bx, by, 80, 6);

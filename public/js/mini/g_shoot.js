@@ -49,11 +49,11 @@
     const roll = -fall * Math.PI / 2 / 3;
     return mgSpr('sh' + kind + mat + '|' + fall, () => {
       const m = kind === 'cap' ? mgModel('shCap' + mat, () => capModel(mat)) : kind === 'eraser' ? mgModel('shEr', standEraser) : mgModel('shBox', matchBox);
-      const s = bake(m, { yaw: 0, roll });
+      const s = mgBake(m, { yaw: Math.PI / 2, roll });
       return s;
     });
   }
-  const ringSpr = (i) => mgSpr('shRing' + i, () => bake(mgModel('shRing', ringModel), { pitch: 0.3 + i * 0.35, yaw: i * 0.8, noShadow: true }));
+  const ringSpr = (i) => mgSpr('shRing' + i, () => mgBake(mgModel('shRing', ringModel), { pitch: 0.3 + i * 0.35, yaw: i * 0.8, noShadow: true }));
   function alphaAt(s, x, y) {
     if (!s.mask) {
       const d = s.c.getContext('2d').getImageData(0, 0, s.c.width, s.c.height).data;
@@ -73,7 +73,7 @@
   const BOOKS = [ramp(['#a4564a', '#8f483d', '#773b33']), ramp(['#56708f', '#475e7b', '#3a4d66']), ramp(['#6f8a5c', '#5d774c', '#4c623e']), ramp(['#c49a52', '#ad8443', '#8f6c36'])];
 
   const G_ = {
-    name: '輪ゴムの的当て', tint: '#c9875a',
+    name: '輪ゴムの的当て', tint: '#c9875a', kind: 'race',
     howto: [
       '的をタップ(クリック)すると、輪ゴムが飛びます。',
       'キャップ3点、箱2点、消しゴム1点、走るサメは5点。',
@@ -107,13 +107,13 @@
       this.score = 0; this.left = BANDS; this.shots = 0; this.hits = 0; this.cd = 0;
       this.bands = []; this.pops = [];
       this.t = [];
-      for (let ti = 0; ti < 3; ti++) for (const x of XS) if (Math.random() < 0.7) this.t.push(this.mkT(ti, x));
+      for (let ti = 0; ti < 3; ti++) for (const x of XS) if (mgRand() < 0.7) this.t.push(this.mkT(ti, x));
       this.shark = { x: 2, dir: 1, alive: true, rt: 0, tail: 0 };
       this.aimX = null;
     },
     mkT(ti, x) {
-      const r = Math.random(), kind = r < 0.35 ? 'cap' : r < 0.65 ? 'box' : 'eraser';
-      return { ti, x: x + (Math.random() - 0.5) * 0.4, kind, mat: ['red', 'blue', 'black'][Math.floor(Math.random() * 3)], fall: 0, st: 'up', rise: 0, rt: 0 };
+      const r = mgRand(), kind = r < 0.35 ? 'cap' : r < 0.65 ? 'box' : 'eraser';
+      return { ti, x: x + (mgRand() - 0.5) * 0.4, kind, mat: ['red', 'blue', 'black'][Math.floor(mgRand() * 3)], fall: 0, st: 'up', rise: 0, rt: 0 };
     },
     tPos(t) { const T = TIERS[t.ti]; return [t.x, T.y - (t.fall > 0 ? t.fall * 0.25 : 0), T.top - (t.rise > 0 ? 0 : 0)]; },
     down(x, y) { this.shoot(x, y); },
@@ -130,10 +130,10 @@
       const sh = this.shark;
       // 中段を走るサメ
       if (sh.alive) { sh.x += sh.dir * dt * 2.6; if (sh.x > 16.4) sh.dir = -1; if (sh.x < 0.9) sh.dir = 1; sh.tail += dt * 6; }
-      else { sh.rt -= dt; if (sh.rt <= 0) { sh.alive = true; sh.x = Math.random() < 0.5 ? 0.9 : 16.4; sh.dir = sh.x < 8 ? 1 : -1; } }
+      else { sh.rt -= dt; if (sh.rt <= 0) { sh.alive = true; sh.x = mgRand() < 0.5 ? 0.9 : 16.4; sh.dir = sh.x < 8 ? 1 : -1; } }
       for (const t of this.t) {
-        if (t.st === 'fall') { t.fall = Math.min(3, t.fall + dt * 14); if (t.fall >= 3) { t.st = 'gone'; t.rt = 2 + Math.random() * 2; } }
-        else if (t.st === 'gone') { t.rt -= dt; if (t.rt <= 0) Object.assign(t, this.mkT(t.ti, XS[Math.floor(Math.random() * XS.length)]), { st: 'up', rise: 0.25 }); }
+        if (t.st === 'fall') { t.fall = Math.min(3, t.fall + dt * 14); if (t.fall >= 3) { t.st = 'gone'; t.rt = 2 + mgRand() * 2; } }
+        else if (t.st === 'gone') { t.rt -= dt; if (t.rt <= 0) Object.assign(t, this.mkT(t.ti, XS[Math.floor(mgRand() * XS.length)]), { st: 'up', rise: 0.25 }); }
         if (t.rise > 0) t.rise -= dt;
       }
       for (let i = this.bands.length - 1; i >= 0; i--) {
@@ -143,7 +143,7 @@
       }
       for (let i = this.pops.length - 1; i >= 0; i--) { this.pops[i].t += dt; if (this.pops[i].t > 0.9) this.pops.splice(i, 1); }
       if (MINI.t >= TIME || (this.left <= 0 && !this.bands.length)) {
-        mgFinish({ head: this.score + ' 点', lines: ['当たり ' + this.hits + ' / ' + this.shots + ' 本'], good: true });
+        mgFinish({ head: this.score + ' 点', score: this.score, unit: ' 点', lines: ['当たり ' + this.hits + ' / ' + this.shots + ' 本'], good: true });
       }
     },
     // 輪ゴムが届いた点で、手前の的から順に当たりを調べる
@@ -152,12 +152,12 @@
       for (const t of this.t) {
         if (t.st !== 'up' || t.rise > 0) continue;
         const [wx, wy, wz] = this.tPos(t), s = tSpr(t.kind, t.mat, 0), [sx, sy] = mgP(wx, wy, wz);
-        if (alphaAt(s, x - (sx - s.ax), y - (sy - s.ay))) cand.push({ t, k: wx + wy, wx, wy, wz });
+        if (alphaAt(s, x - (sx - s.ax), y - (sy - s.ay))) cand.push({ t, k: mgDepth(wx, wy), wx, wy, wz });
       }
       const sh = this.shark;
       if (sh.alive) {
         const s = this.sharkSpr(), [sx, sy] = mgP(sh.x, TIERS[1].y, TIERS[1].top);
-        if (alphaAt(s, x - (sx - s.ax), y - (sy - s.ay))) cand.push({ shark: true, k: sh.x + TIERS[1].y, wx: sh.x, wy: TIERS[1].y, wz: TIERS[1].top });
+        if (alphaAt(s, x - (sx - s.ax), y - (sy - s.ay))) cand.push({ shark: true, k: mgDepth(sh.x, TIERS[1].y), wx: sh.x, wy: TIERS[1].y, wz: TIERS[1].top });
       }
       cand.sort((a, b) => b.k - a.k);
       const c = cand[0];
@@ -169,9 +169,11 @@
       this.pops.push({ x: c.wx, y: c.wy, z: c.wz + 1.3, t: 0, s: '+' + pts });
       mgBurst(c.wx, c.wy, c.wz + 0.6, 5, '#efe8d8', 1.6);
     },
-    sharkSpr() { return SPR.shark(1, SPR.yawIndex(this.shark.dir > 0 ? 0 : Math.PI), Math.floor(this.shark.tail) % 4 === 0 ? 0 : Math.floor(this.shark.tail) % 4 === 2 ? 2 : 1, 0, 0); },
+    sharkSpr() { return SPR.shark(1, SPR.yawIndex(mgYawW(this.shark.dir > 0 ? 0 : Math.PI)), Math.floor(this.shark.tail) % 4 === 0 ? 0 : Math.floor(this.shark.tail) % 4 === 2 ? 2 : 1, 0, 0); },
     ground(x, y) { return y > 7.4 ? 1.0 : y > 4.2 ? 2.1 : 3.2; },
     idle(dt) { if (this.shark && this.shark.alive) { this.shark.x += this.shark.dir * dt * 2.6; if (this.shark.x > 16.4) this.shark.dir = -1; if (this.shark.x < 0.9) this.shark.dir = 1; this.shark.tail += dt * 6; } },
+    prog() { return { s: this.score + ' 点' }; },
+    cpuScore() { return Math.round(mgLv(18, 32, 48) + Math.random() * mgLv(10, 14, 16)); },
     draw(ctx, vw, vh) {
       mgCamera(vw, vh, 8.7, 5.6, 2.0, 4);
       const objs = [];

@@ -4,26 +4,26 @@
 defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
 
 (function () {
-  const NB = { x0: 0, y0: 0, x1: 16, y1: 12 }, TOP = 0.4, GUT = 8;
+  const NB = { x0: 0, y0: 0, x1: 14, y1: 14 }, TOP = 0.4, GUT = 7;
   const PAPER = ['#f5f0e5', '#ebe5d8', '#dfd8c9', '#cfc7b6'].map(hexRGB);
   const MAXP = 3.8, VMAX = 15;   // ひっぱりの最大(ワールド)、最大の速さ
 
   const spr = (team, a) => mgSpr('ke' + team + '|' + SPR.yawIndex(a), () => {
     const m = mgModel('keshi' + team, () => mgEraserModel(2.0, 1.3, 0.7, team ? 'sleeve' : 'sleeveR', 'sleeveW'));
-    return bake(m, { yaw: SPR.yawIndex(a) / SPR.YAWS * Math.PI * 2 });
+    return mgBake(m, { yaw: SPR.yawIndex(a) / SPR.YAWS * Math.PI * 2 });
   });
 
   const G_ = {
-    name: 'ケシバト', tint: COL.red, cpu: true,
+    name: 'ケシバト', tint: COL.red, cpu: true, kind: 'duel',
     howto: [
-      '自分の消しゴム(赤)から指を引いて、はなすとはじけます。',
+      '手前の自分の消しゴムから指を引いて、はなすとはじけます。',
       'ノートから落ちたら負け。相手の2個を先に落とそう。',
       '交代で1回ずつ。先に2勝したほうの勝ちです。',
     ],
     stageDef() {
       const inNb = (x, y) => x >= NB.x0 && x <= NB.x1 && y >= NB.y0 && y <= NB.y1;
       return {
-        cx: 8, cy: 6,
+        cx: 7, cy: 7,
         items: [
           { x0: NB.x0 - 0.18, y0: NB.y0 - 0.18, x1: NB.x1 + 0.18, y1: NB.y1 + 0.18, z: 0, h: 0.08, r: 0.15,
             top: (x, y, px, py) => mgTone(['#53698a', '#455a79', '#384a65'].map(hexRGB), 1, px, py),
@@ -34,7 +34,7 @@ defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
               let L = 0.6 + (dg < 0.9 ? (0.9 - dg) / 0.9 * 2.2 : 0) + (vnoise(x * 0.8, y * 0.8) - 0.5) * 0.5;
               let col = mgTone(PAPER, L, px, py);
               if (dg > 0.25 && y > 1.1 && mgCross((a, b) => b - 1.1, x, y, 0.62)) col = hexRGB('#b7cdd8');
-              if (mgCross((a) => a, x, y, 100) || Math.abs(x - 1.3) < 0.04 || Math.abs(x - 9.3) < 0.04) col = hexRGB('#d9a69c');
+              if (mgCross((a) => a, x, y, 100) || Math.abs(x - 1.3) < 0.05 || Math.abs(x - 8.3) < 0.05) col = hexRGB('#d9a69c');
               if (Math.abs(x - GUT) < 0.05) col = hexRGB('#c3bba9');
               return col;
             },
@@ -52,20 +52,21 @@ defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
     },
     newRound() {
       const mk = (team, x, y, a) => ({ team, x, y, z: TOP, vx: 0, vy: 0, vz: 0, r: 0.82, m: 1, a, w: 0, out: false, g: TOP });
-      this.b = [mk(0, 3.6, 4.0, 0), mk(0, 4.2, 8.2, 0), mk(1, 12.4, 3.8, Math.PI), mk(1, 11.8, 8.0, Math.PI)];
+      this.b = [mk(0, 4.2, 10.6, 0), mk(0, 9.8, 10.8, 0), mk(1, 4.0, 3.4, 0), mk(1, 9.9, 3.2, 0)];
       this.turn = this.round % 2;   // 0 あなた, 1 CPU
       this.phase = 'aim'; this.sel = null; this.aim = null; this.cpuT = 0.9; this.msgT = 1.4;
-      this.msg = 'ラウンド ' + (this.round + 1); this.plan = null;
+      this.msg = 'ラウンド ' + (this.round + 1); this.msgW = -1; this.plan = null;
     },
     begin() {},
     onNb(x, y) { return x >= NB.x0 && x <= NB.x1 && y >= NB.y0 && y <= NB.y1; },
     down(sx, sy) {
-      if (this.phase !== 'aim' || this.turn !== 0 || this.msgT > 0.6) return;
+      const me = MINI.seat;
+      if (this.phase !== 'aim' || this.turn !== me || this.msgT > 0.6) return;
       const [x, y] = mgToWorld(sx, sy, TOP);
       let best = null, bd = 1.3;
-      for (const b of this.b) if (b.team === 0 && !b.out) { const d = Math.hypot(b.x - x, b.y - y); if (d < bd) { bd = d; best = b; } }
+      for (const b of this.b) if (b.team === me && !b.out) { const d = Math.hypot(b.x - x, b.y - y); if (d < bd) { bd = d; best = b; } }
       // 指の位置が少しずれても、一番近い自分の消しゴムを選ぶ
-      if (!best) for (const b of this.b) if (b.team === 0 && !b.out) { const d = Math.hypot(b.x - x, b.y - y); if (d < 3 && (!best || d < bd)) { bd = d; best = b; } }
+      if (!best) for (const b of this.b) if (b.team === me && !b.out) { const d = Math.hypot(b.x - x, b.y - y); if (d < 3 && (!best || d < bd)) { bd = d; best = b; } }
       if (best) { this.sel = best; this.aim = { dx: 0, dy: 0 }; mgSnd('tap'); }
     },
     move(sx, sy) {
@@ -79,8 +80,13 @@ defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
     up() {
       if (!this.sel || !this.aim) return;
       const l = Math.hypot(this.aim.dx, this.aim.dy);
-      if (l > 0.35) this.shoot(this.sel, -this.aim.dx / l, -this.aim.dy / l, l / MAXP);
+      if (l > 0.35 && this.phase === 'aim' && this.turn === MINI.seat) mgInput({ i: this.b.indexOf(this.sel), ux: -this.aim.dx / l, uy: -this.aim.dy / l, p: l / MAXP });
       this.sel = null; this.aim = null;
+    },
+    onAct(seat, a) {
+      const b = this.b[a.i | 0], l = Math.hypot(+a.ux || 0, +a.uy || 0);
+      if (this.phase !== 'aim' || this.turn !== seat || !b || b.team !== seat || b.out || !l) return;
+      this.shoot(b, a.ux / l, a.uy / l, Math.max(0, Math.min(1, +a.p || 0)));
     },
     shoot(b, ux, uy, p) {
       const v = VMAX * (0.18 + 0.82 * p);
@@ -122,7 +128,7 @@ defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
     },
     update(dt) {
       this.msgT -= dt;
-      if (this.phase === 'aim' && this.turn === 1 && this.msgT < 0.6) {
+      if (this.phase === 'aim' && mgCpu(this.turn) && this.msgT < 0.6) {
         this.cpuT -= dt;
         if (!this.plan && this.cpuT < 0.5) this.plan = this.cpuPlan();
         if (this.plan && this.cpuT < 0) {
@@ -160,25 +166,45 @@ defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
       if (!left[0] || !left[1]) {
         const w = !left[1] && left[0] ? 0 : !left[0] && left[1] ? 1 : this.turn;   // 同時に落ちたらはじいた側の勝ち
         this.wins[w]++; this.round++;
-        mgSnd(w === 0 ? 'good' : 'bad');
+        mgSnd(w === MINI.seat ? 'good' : 'bad');
         if (this.wins[w] >= 2) {
-          mgFinish(w === 0
-            ? { head: 'かち', lines: ['あなた ' + this.wins[0] + ' - ' + this.wins[1] + ' CPU'], good: true }
-            : { head: 'まけ', lines: ['あなた ' + this.wins[0] + ' - ' + this.wins[1] + ' CPU'], good: false });
+          const W = this.wins;
+          mgFinish((seat) => ({ head: w === seat ? 'かち' : 'まけ', lines: ['あなた ' + W[seat] + ' - ' + W[1 - seat] + ' ' + mgVs(seat)], good: w === seat }));
           this.phase = 'done';
           return;
         }
         this.newRound();
-        this.msg = (w === 0 ? 'あなたが取った' : 'CPUが取った') + '  次は ラウンド ' + (this.round + 1);
+        this.msg = '次は ラウンド ' + (this.round + 1); this.msgW = w;
         this.msgT = 1.8;
         return;
       }
       this.turn = 1 - this.turn; this.phase = 'aim'; this.cpuT = mgLv(1.2, 0.9, 0.7);
     },
     idle() {},
+    snap() {
+      const r = (v) => Math.round(v * 100) / 100;
+      return { b: this.b.map(b => [r(b.x), r(b.y), r(b.z), r(b.a), b.out ? 1 : 0, b.g, r(b.vx), r(b.vy)]), tu: this.turn, ph: this.phase, wi: this.wins, ro: this.round, mt: this.msgT, m: this.msg, mw: this.msgW };
+    },
+    apply(s) {
+      if (s.ro !== this.round) { this.sel = null; this.aim = null; }
+      this.net = s;
+      this.turn = s.tu; this.phase = s.ph; this.wins = s.wi; this.round = s.ro; this.msgT = s.mt; this.msg = s.m; this.msgW = s.mw;
+      s.b.forEach((a, i) => { const b = this.b[i]; b.out = !!a[4]; b.g = a[5]; b.a = a[3]; if (Math.hypot(b.x - a[0], b.y - a[1]) > 3) { b.x = a[0]; b.y = a[1]; b.z = a[2]; } });
+    },
+    guest(dt) {
+      this.msgT -= dt;
+      const s = this.net;
+      if (!s) return;
+      const k = Math.min(1, dt * 15);
+      s.b.forEach((a, i) => {
+        const b = this.b[i];
+        a[0] += a[6] * dt; a[1] += a[7] * dt;
+        b.x += (a[0] - b.x) * k; b.y += (a[1] - b.y) * k; b.z += (a[2] - b.z) * k;
+      });
+    },
     draw(ctx, vw, vh) {
-      mgCamera(vw, vh, 8, 6, TOP, 8);
-      const objs = this.b.map(b => ({ s: spr(b.team, b.a), x: b.x, y: b.y, z: b.z, g: b.g, k: b.x + b.y }));
+      mgCamera(vw, vh, 7, 7, TOP, 8);
+      const objs = this.b.map(b => ({ s: spr(b.team, b.a), x: b.x, y: b.y, z: b.z, g: b.g }));
       mgDraw(ctx, vw, vh, objs, (c) => {
         mgFxDraw(c);
         // ねらいの表示: 引いた向きの反対へ点線
@@ -192,17 +218,19 @@ defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
             c.fillStyle = '#3a342d'; c.fillRect(hx - 1, hy - 1, 3, 3);
           }
         }
-        if (this.phase === 'aim' && this.turn === 0 && !this.sel && this.msgT < 0.6) {
+        if (this.phase === 'aim' && this.turn === MINI.seat && !this.sel && this.msgT < 0.6) {
           const bob = Math.floor(performance.now() / 300) % 2;
-          for (const b of this.b) if (b.team === 0 && !b.out) { const [sx, sy] = mgP(b.x, b.y, TOP + 1.2); drawMarker(c, sx, sy - bob, 0); }
+          for (const b of this.b) if (b.team === MINI.seat && !b.out) { const [sx, sy] = mgP(b.x, b.y, TOP + 1.2); drawMarker(c, sx, sy - bob, 0); }
         }
       });
     },
     hud(ctx, vw, vh) {
-      mgHudNote(ctx, 6, 30, 'あなた', String(this.wins[0]), COL.noteR, COL.noteRDark);
-      mgHudNote(ctx, vw - 6, 30, 'CPU', String(this.wins[1]), COL.noteB, COL.noteBDark, true);
-      if (this.msgT > 0) centerCard(ctx, vw, vh, [[this.msg, 14, COL.ink, true]], { up: 20 });
-      else mgHudTag(ctx, vw, this.phase === 'move' ? '...' : this.turn === 0 ? 'あなたの番' : 'CPUの番');
+      const me = MINI.seat;
+      mgHudNote(ctx, 6, 30, mgName(me), String(this.wins[me]), me ? COL.noteB : COL.noteR, me ? COL.noteBDark : COL.noteRDark);
+      mgHudNote(ctx, vw - 6, 30, mgName(1 - me), String(this.wins[1 - me]), me ? COL.noteR : COL.noteB, me ? COL.noteRDark : COL.noteBDark, true);
+      const msg = this.msgW >= 0 ? (this.msgW === me ? 'あなた' : mgName(1 - me)) + 'が取った  ' + this.msg : this.msg;
+      if (this.msgT > 0) centerCard(ctx, vw, vh, [[msg, 14, COL.ink, true]], { up: 20 });
+      else mgHudTag(ctx, vw, this.phase === 'move' ? '...' : this.turn === me ? 'あなたの番' : mgName(1 - me) + 'の番');
     },
   };
   mgRegister(G_);

@@ -9,9 +9,12 @@ const MINI = {
   cam: { ox: 0, oy: 0 },
   ptr: { id: null, down: false, x: 0, y: 0, sx: 0, sy: 0, t: 0 },
   ptrs: new Set(),
+  flip: false, fc: [0, 0],   // 相手側から見るとき true(fc は回転の中心)
   result: null,
   t: 0,
   layer: null,
+  seat: 0,            // 自分の席(0: 手前で親、1: 相手側から見る)
+  net: null,          // オンライン中の状態
 };
 const KX = -LIGHT[0] / LIGHT[2], KY = -LIGHT[1] / LIGHT[2];
 
@@ -40,7 +43,7 @@ defMat('cup', ['#d8d4cc', '#bcb7ae', '#99948b'], '#57534c', 'plastic');
 
 // ---------- 共通モデル ----------
 function mgModel(name, make) { return MODELS[name] || (MODELS[name] = make()); }
-function mgSpr(key, make) { return SPR.get('mg|' + key, make); }
+function mgSpr(key, make) { return SPR.get('mg|' + (MINI.flip ? 'f|' : '') + key, make); }
 // 角の丸い箱(中心が原点、底が z=0)
 function boxFill(sx, sy, sz, r, mat) {
   return (x, y, z) => {
@@ -63,16 +66,29 @@ function mgEraserModel(L, W, H, sleeve, band) {
   });
 }
 
+// ---------- 視点 ----------
+// ミニゲームは「斜め上から見下ろす」視点で描く。ゲーム内の座標 (x, y) は
+// x が画面の右、y が手前(画面の下)。アイソメの世界とは45度回した関係になる。
+// 2人で遊ぶときは相手側から見るために180度まわす(MINI.flip)。
+const VSX = ISO.X * Math.SQRT2, VSY = ISO.Y * Math.SQRT2;          // 1単位あたりの画素(横、奥行き)
+const VKX = (KX - KY) / Math.SQRT2, VKY = (KX + KY) / Math.SQRT2;   // 落ち影の向き(画面基準)
+function mgV(x, y) { return MINI.flip ? [MINI.fc[0] * 2 - x, MINI.fc[1] * 2 - y] : [x, y]; }
+function mgDepth(x, y) { return MINI.flip ? MINI.fc[1] * 2 - y : y; }
+// ゲーム内の向き -> スプライトを焼く向き(世界の向き)
+function mgYawW(a) { return (a || 0) + (MINI.flip ? Math.PI : 0) - Math.PI / 4; }
+function mgBake(m, opt) { opt = Object.assign({}, opt || {}); opt.yaw = mgYawW(opt.yaw); return bake(m, opt); }
+
 // ---------- 舞台の焼き込み ----------
-// def: { cx, cy (舞台の中心), items: [{ x0,y0,x1,y1, z, h, r, top(x,y,px,py)->rgb, side:[+y面, +x面, 下端], edge }] }
+// def: { cx, cy (舞台の中心), items: [{ x0,y0,x1,y1, z, h, r, top(x,y,px,py)->rgb, side:[手前の面, (未使用), 下端], edge }] }
 function mgBakeStage(def) {
   const items = def.items || [];
-  const cx = def.cx, cy = def.cy;
-  const scx = toSX(cx, cy), scy = toSY(cx, cy, 0);
-  const left = Math.floor(scx - (def.halfW || 460)), top = Math.floor(scy - (def.halfH || 420));
-  const w = (def.halfW || 460) * 2, h = (def.halfH || 420) * 2;
+  const [vcx, vcy] = mgV(def.cx, def.cy);
+  const halfW = def.halfW || 460, halfH = def.halfH || 420;
+  const left = Math.floor(vcx * VSX - halfW), top = Math.floor(vcy * VSY - halfH);
+  const w = halfW * 2, h = halfH * 2;
   const c = makeCanvas(w, h), g = c.getContext('2d'), img = g.createImageData(w, h), d = img.data;
-  const lampX = cx - 9, lampY = cy - 11;
+  const lampX = vcx - 9, lampY = vcy - 9;
+  const fl = MINI.flip ? -1 : 1, kx = VKX * fl, ky = VKY * fl;   // 影の向き(ゲーム座標)
   const inIt = (it, x, y) => {
     if (x < it.x0 || y < it.y0 || x > it.x1 || y > it.y1) return false;
     const r = it.r || 0;
@@ -89,29 +105,26 @@ function mgBakeStage(def) {
       const zt = it.z + it.h;
       if (zt <= z + 0.001) continue;
       const dz = zt - z;
-      if (inIt(it, x - KX * dz, y - KY * dz)) { s = 2; break; }
-      if (inIt(it, x - KX * dz * 1.5, y - KY * dz * 1.5) && (px + py) % 2 === 0) s = Math.max(s, 1);
+      if (inIt(it, x - kx * dz, y - ky * dz)) { s = 2; break; }
+      if (inIt(it, x - kx * dz * 1.5, y - ky * dz * 1.5) && (px + py) % 2 === 0) s = Math.max(s, 1);
     }
     return s ? mix(col, PAL.shadow, 0.42) : col;
   };
+  const toG = (va, vb) => mgV(va, vb);   // 画面基準 -> ゲーム座標(180度回転は自分自身が逆)
   for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) {
-    const sx = px + left + 0.5, sy = py + top + 0.5, u = sx / ISO.X;
+    const sx = px + left + 0.5, sy = py + top + 0.5, va = sx / VSX;
     let best = null, bz = -1, bside = 0, bx = 0, by = 0;
     for (const it of items) {
       const zt = it.z + it.h;
       if (zt <= bz) continue;
-      const t = (sy + zt * ISO.Z) / ISO.Y, x = (t + u) / 2, y = (t - u) / 2;
+      const [x, y] = toG(va, (sy + zt * ISO.Z) / VSY);
       if (inIt(it, x, y)) { best = it; bz = zt; bside = 0; bx = x; by = y; continue; }
       const kmax = Math.round(it.h * ISO.Z);
       for (let k = 1; k <= kmax; k++) {
         const zz = zt - k / ISO.Z;
         if (zz <= bz) break;
-        const t2 = (sy - k + zt * ISO.Z) / ISO.Y, x2 = (t2 + u) / 2, y2 = (t2 - u) / 2;
-        if (inIt(it, x2, y2)) {
-          best = it; bz = zz; bx = x2; by = y2;
-          bside = k === kmax ? 3 : ((it.x1 - x2) < (it.y1 - y2) ? 2 : 1);
-          break;
-        }
+        const [x2, y2] = toG(va, (sy - k + zt * ISO.Z) / VSY);
+        if (inIt(it, x2, y2)) { best = it; bz = zz; bx = x2; by = y2; bside = k === kmax ? 3 : 1; break; }
       }
     }
     const i = (py * w + px) * 4;
@@ -120,54 +133,58 @@ function mgBakeStage(def) {
       if (bside) col = best.side[bside - 1];
       else {
         col = best.top(bx, by, px, py);
-        if (best.edge && Math.min(best.x1 - bx, best.y1 - by) < 0.06) col = best.edge;
+        if (best.edge) {
+          const [, vb] = mgV(bx, by), [, vb1] = mgV(bx, MINI.flip ? best.y0 : best.y1);
+          if (Math.abs(vb1 - vb) < 0.08) col = best.edge;   // 手前の縁の明るい線
+        }
         col = shade(col, bx, by, bz, best, px, py);
       }
     } else {
-      const t = sy / ISO.Y, x = (t + u) / 2, y = (t - u) / 2;
-      col = shade(mgDesk(x, y, px, py, lampX, lampY), x, y, 0, null, px, py);
+      const vb = sy / VSY, [x, y] = toG(va, vb);
+      col = shade(mgDesk(va, vb, px, py, lampX, lampY), x, y, 0, null, px, py);
     }
     d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
   }
   g.putImageData(img, 0, 0);
-  return { c, x: left, y: top, cx, cy, fill: 'rgb(' + PAL.desk[4].join(',') + ')' };
+  return { c, x: left, y: top, fill: 'rgb(' + PAL.desk[4].join(',') + ')' };
 }
 
-// 机の板目(本編の机と同じ調子)
+// 机の板目(本編の机と同じ調子)。座標は画面基準で、板は手前から奥へ通る
 function mgDesk(x, y, px, py, lx, ly) {
-  const plank = Math.floor((x + 40) / 2.6);
+  const plank = Math.floor((x + 40) / 2.2);
   const seed = hash2(plank, 7) * 50;
-  const gr = (x + 0.28 * Math.sin(y * 0.33 + seed) + 0.18 * vnoise(x * 1.4, y * 0.25 + seed)) * 4.2;
-  const broad = vnoise(x * 0.45 + seed, y * 0.07);
-  const light = Math.max(0, Math.min(1, 1.15 - Math.hypot(x - lx, y - ly) / 30));
+  const gr = (x + 0.2 * Math.sin(y * 0.4 + seed) + 0.14 * vnoise(x * 1.4, y * 0.3 + seed)) * 5;
+  const broad = vnoise(x * 0.5 + seed, y * 0.09);
+  const light = Math.max(0, Math.min(1, 1.15 - Math.hypot(x - lx, (y - ly) * 1.4) / 28));
   let tone = 1 + (broad > 0.62 ? -1 : broad < 0.33 ? 1 : 0) + (hash2(plank, 3) > 0.5 ? 1 : 0);
   tone += (1 - light) * 2.2 + bayer(px, py) - 0.5;
-  if (gr - Math.floor(gr) < 0.11) tone += 1.2;
-  const s = (x + 40) / 2.6;
-  if (Math.floor(s) !== Math.floor(s + RX / 2.6) || Math.floor(s) !== Math.floor(s + DY / 2.6)) return PAL.seam;
+  if (gr - Math.floor(gr) < 0.1) tone += 1.2;
+  const sP = (x + 40) / 2.2;
+  if (Math.floor(sP) !== Math.floor(sP + 1 / VSX / 2.2)) return PAL.seam;
   return PAL.desk[Math.max(0, Math.min(5, Math.round(tone)))];
 }
 
 // 面の塗り分けを作る補助: 3段の色をディザで混ぜる
 function mgTone(ramp, L, px, py) { return ramp[Math.max(0, Math.min(ramp.length - 1, Math.round(L + bayer(px, py) - 0.5)))]; }
-// 等高線の交差で1画素の線(本編マットと同じ方法)
+// 等高線の交差で1画素の線(隣の画素で値の段が変われば線)
 function mgCross(f, x, y, s) {
   const a = Math.floor(f(x, y) / s);
-  return a !== Math.floor(f(x + RX, y - RX) / s) || a !== Math.floor(f(x + DY, y + DY) / s);
+  return a !== Math.floor(f(x + 1 / VSX, y) / s) || a !== Math.floor(f(x, y + 1 / VSY) / s);
 }
 
 // ---------- 描画 ----------
-function mgP(x, y, z) { return [Math.round(toSX(x, y) + MINI.cam.ox), Math.round(toSY(x, y, z) + MINI.cam.oy)]; }
-function mgToWorld(sx, sy, z) {
-  const u = (sx - MINI.cam.ox) / ISO.X, t = (sy - MINI.cam.oy + (z || 0) * ISO.Z) / ISO.Y;
-  return [(t + u) / 2, (t - u) / 2];
-}
+function mgP(x, y, z) { const [a, b] = mgV(x, y); return [Math.round(a * VSX + MINI.cam.ox), Math.round(b * VSY - (z || 0) * ISO.Z + MINI.cam.oy)]; }
+// 画面の点 -> 高さ z の面の上のゲーム座標
+function mgToWorld(sx, sy, z) { return mgV((sx - MINI.cam.ox) / VSX, (sy - MINI.cam.oy + (z || 0) * ISO.Z) / VSY); }
+// 画面上の位置(カメラなし)
+function mgScreen(x, y, z) { const [a, b] = mgV(x, y); return [a * VSX, b * VSY - (z || 0) * ISO.Z]; }
 function mgCamera(vw, vh, cx, cy, cz, dy) {
-  MINI.cam.ox = Math.round(vw / 2 - toSX(cx, cy));
-  MINI.cam.oy = Math.round(vh / 2 - toSY(cx, cy, cz || 0) + (dy || 0));
+  const [sx, sy] = mgScreen(cx, cy, cz);
+  MINI.cam.ox = Math.round(vw / 2 - sx);
+  MINI.cam.oy = Math.round(vh / 2 - sy + (dy || 0));
 }
 
-// objs: { s: スプライト, x, y, z, k: 並び順, g: 影の落ちる高さ, a: 透明度, ns: 影なし, f(ctx): 自前で描く }
+// objs: { s: スプライト, x, y, z, k: 並び順(省略時は奥行き), g: 影の落ちる高さ, a: 透明度, ns: 影なし, f(ctx): 自前で描く }
 function mgDraw(ctx, vw, vh, objs, after) {
   const st = MINI.stage;
   ctx.fillStyle = st.fill; ctx.fillRect(0, 0, vw, vh);
@@ -176,10 +193,11 @@ function mgDraw(ctx, vw, vh, objs, after) {
   const sl = MINI.layer, sc = sl.getContext('2d');
   sc.globalCompositeOperation = 'source-over';
   sc.clearRect(0, 0, vw, vh);
+  const fl = MINI.flip ? -1 : 1;
   for (const o of objs) {
     if (o.ns || !o.s || !o.s.sh || o.a === 0) continue;
     const g = o.g || 0, dz = Math.max(0, (o.z || 0) - g);
-    const [sx, sy] = mgP(o.x + dz * KX, o.y + dz * KY, g);
+    const [sx, sy] = mgP(o.x + dz * VKX * fl, o.y + dz * VKY * fl, g);
     sc.drawImage(o.s.sh, sx - o.s.sax, sy - o.s.say);
   }
   if (MINI.shadowExtra) MINI.shadowExtra(sc);
@@ -187,7 +205,8 @@ function mgDraw(ctx, vw, vh, objs, after) {
   sc.fillStyle = 'rgb(' + PAL.shadow.join(',') + ')';
   sc.fillRect(0, 0, vw, vh);
   ctx.globalAlpha = 0.3; ctx.drawImage(sl, 0, 0); ctx.globalAlpha = 1;
-  objs.sort((a, b) => (a.k !== undefined ? a.k : a.x + a.y + (a.z || 0) * 0.9) - (b.k !== undefined ? b.k : b.x + b.y + (b.z || 0) * 0.9));
+  for (const o of objs) o._k = o.k !== undefined ? o.k : mgDepth(o.x, o.y) + (o.z || 0) * 0.01;
+  objs.sort((a, b) => a._k - b._k);
   for (const o of objs) {
     if (o.f) { o.f(ctx); continue; }
     if (!o.s || o.a === 0) continue;
@@ -220,6 +239,7 @@ function mgDots(ctx, x0, y0, z0, x1, y1, z1, col, gap) {
 // 小さな粒(ほこり、紙くず、火花の代わりの白い粒)
 const MGFX = [];
 function mgBurst(x, y, z, n, col, spd) {
+  if (mgHosting()) MINI.net.fx.push([x, y, z, n, col, spd]);
   for (let k = 0; k < n; k++) {
     const a = Math.random() * Math.PI * 2, s = (spd || 2) * (0.4 + Math.random() * 0.8);
     MGFX.push({ x, y, z, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vz: 1.5 + Math.random() * 2.5, life: 0.5 + Math.random() * 0.4, col });
@@ -273,6 +293,7 @@ function mgDiscs(bodies, dt, fric, onHit) {
 
 // ---------- 効果音(本編の合成器を使う) ----------
 function mgSnd(name) {
+  if (mgHosting()) MINI.net.snd.push(name);
   const A = AUDIO;
   if (!A.ctx || A.ctx.state !== 'running') return;
   const t = A.ctx.currentTime + 0.005;
@@ -294,26 +315,182 @@ function mgSnd(name) {
 }
 
 // ---------- 画面の流れ ----------
-function mgOpen() { G.screen = 'mini'; MINI.st = 'menu'; MINI.cur = null; }
+function mgOpen() { G.screen = 'mini'; MINI.st = 'menu'; MINI.cur = null; MINI.flip = false; mgNetEnd(); }
 function mgStart(g) {
+  mgNetEnd();
   MINI.cur = g; MINI.st = 'intro'; MINI.result = null; MGFX.length = 0;
-  MINI.shadowExtra = null;
-  if (!g.stage) g.stage = mgBakeStage(g.stageDef());
-  MINI.stage = g.stage;
+  MINI.shadowExtra = null; MINI.flip = false;
+  mgUseStage(g);
   g.reset();
 }
-function mgPlay() { MINI.st = 'play'; MINI.t = 0; MGFX.length = 0; MINI.cur.reset(); if (MINI.cur.begin) MINI.cur.begin(); }
-// res: { head, lines: [..], good: bool }
+// 今の向き(MINI.flip)の舞台を用意する
+function mgUseStage(g) {
+  const def = g.stageDef(), k = MINI.flip ? 1 : 0;
+  MINI.fc = [def.cx, def.cy];
+  g.stages = g.stages || {};
+  if (!g.stages[k]) g.stages[k] = mgBakeStage(def);
+  MINI.stage = g.stages[k];
+}
+function mgPlay(seed) {
+  const n = MINI.net;
+  MINI.st = 'play'; MINI.t = 0; MGFX.length = 0; MINI.rng = (seed === undefined ? Math.random() * 1e9 : seed) >>> 0;
+  if (n) { n.again = [false, false]; n.opDone = null; n.my = null; n.op = null; n.snd = []; n.fx = []; n.sendT = 0; }
+  MINI.cur.reset(); if (MINI.cur.begin) MINI.cur.begin();
+}
+// res: { head, lines: [..], good: bool }。対戦では席ごとの結果を返す関数 (seat) => res でもよい。
+// 記録勝負(kind: 'race')では { score, unit, lines } を渡すと、相手の記録とくらべて勝ち負けを決める。
 function mgFinish(res) {
   if (MINI.st !== 'play') return;
+  const g = MINI.cur, n = MINI.net;
+  if (g.kind === 'race' && n) {
+    n.my = res;
+    if (mgHuman()) mgSendD({ k: 'done', sc: res.score });
+    else if (!n.opDone) n.opDone = { sc: g.cpuScore ? g.cpuScore() : 0 };
+    MINI.st = 'result'; MINI.result = null; MINI.resT = 0;
+    mgRaceResult();
+    return;
+  }
+  if (typeof res === 'function') {
+    if (mgHuman()) mgSendD({ k: 'fin', r: res(1 - MINI.seat) });
+    res = res(MINI.seat);
+  }
+  mgShowResult(res);
+}
+function mgShowResult(res) {
   MINI.st = 'result'; MINI.result = res; MINI.resT = 0;
+  if (MINI.net) MINI.net.snd = [];
   mgSnd(res.good === false ? 'lose' : 'win');
+}
+// 記録勝負: 両方の記録がそろったら結果を出す
+function mgRaceResult() {
+  const n = MINI.net;
+  if (!n || !n.my || !n.opDone || MINI.result) return;
+  const a = n.my.score, b = n.opDone.sc, u = n.my.unit || '';
+  if (n.opDone.gone) { MINI.result = { head: 'かち', lines: (n.my.lines || []).concat(['相手が抜けました']), good: true }; MINI.resT = 0; mgSnd('win'); return; }
+  const d = n.my.low ? b - a : a - b;
+  const res = { head: d > 0 ? 'かち' : d < 0 ? 'まけ' : '引き分け', lines: (n.my.lines || []).concat([mgName(MINI.seat) + ' ' + a + u + '  /  ' + mgName(1 - MINI.seat) + ' ' + b + u]), good: d >= 0 };
+  MINI.result = res; MINI.resT = 0;
+  mgSnd(res.good ? 'win' : 'lose');
+}
+
+// ---------- オンライン ----------
+// 対戦(kind: 'duel'): 席0が親になってゲームを動かし、ようすを送る。席1は操作だけを送る。
+// 記録勝負(kind: 'race'): おたがいに同じ種(mgRand)で自分のゲームを動かし、途中経過と記録を送り合う。
+function mgHuman() { return !!(MINI.net && MINI.net.st === 'play'); }
+function mgHost() { return !mgHuman() || MINI.seat === 0; }
+function mgHosting() { return mgHuman() && MINI.seat === 0 && MINI.st === 'play' && MINI.cur && MINI.cur.kind === 'duel'; }
+function mgName(seat) { return seat === MINI.seat ? 'あなた' : mgHuman() || (MINI.net && MINI.net.wasHuman) ? '相手' : 'CPU'; }
+// 結果の文で使う、seat から見た相手の呼び名
+function mgVs(seat) { return seat === MINI.seat ? mgName(1 - MINI.seat) : '相手'; }
+function mgCpu(seat) { return seat !== MINI.seat && !mgHuman(); }
+function mgRand() { let t = MINI.rng = (MINI.rng + 0x6D2B79F5) >>> 0; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+function mgSendD(d) { send({ t: 'mg', d }); }
+// 操作を親へ渡す(親なら自分で受け取る)
+function mgInput(a) {
+  const g = MINI.cur;
+  if (MINI.st !== 'play' || !g.onAct) return;
+  if (mgHost()) g.onAct(MINI.seat, a);
+  else mgSendD({ k: 'act', a });
+}
+function mgNetEnd() {
+  if (MINI.net) { send({ t: 'mgLeave' }); MINI.net = null; }
+  MINI.seat = 0; MINI.flip = false;
+}
+function mgNetStart(kind) {
+  const g = MINI.cur;
+  const id = String(MINI.games.indexOf(g));
+  MINI.net = { st: 'wait', kind, code: '', since: performance.now(), err: '', game: id };
+  MINI.st = kind === 'join' ? 'join' : 'wait';
+  if (kind === 'join') { G.title.code = ''; codeInput.value = ''; if (!G.touch) codeInput.focus(); return; }
+  connect(() => send(kind === 'quick' ? { t: 'mgQuick', game: id } : { t: 'mgCreate', game: id }));
+}
+function mgJoinGo() {
+  if (!MINI.net || G.title.code.length !== 4) return;
+  codeInput.blur();
+  MINI.st = 'wait';
+  const code = G.title.code;
+  connect(() => send({ t: 'mgJoin', code }));
+}
+function mgNetMsg(m) {
+  const n = MINI.net, g = MINI.cur;
+  if (!n || G.screen !== 'mini' || !g) return;
+  if (m.t === 'mgRoom') { n.code = m.code; n.since = performance.now(); }
+  else if (m.t === 'mgErr') { n.err = m.msg; MINI.st = 'join'; }
+  else if (m.t === 'mgCpu') { n.st = 'cpu'; MINI.seat = 0; MINI.flip = false; mgUseStage(g); mgPlay(); }
+  else if (m.t === 'mgStart') {
+    n.st = 'play'; n.wasHuman = true; MINI.seat = m.seat; MINI.flip = m.seat === 1 && g.kind === 'duel' && !g.noFlip;
+    mgUseStage(g); mgPlay(m.seed);
+  }
+  else if (m.t === 'mgLeft') mgOppGone();
+  else if (m.t === 'mg') mgNetData(m.d);
+}
+function mgNetClosed() { if (MINI.net && MINI.net.st !== 'cpu') { if (MINI.net.st === 'wait') { MINI.net.err = '接続できませんでした'; MINI.st = 'intro'; MINI.net = null; } else mgOppGone(); } }
+// 相手がいなくなった: 試合中なら不戦勝
+function mgOppGone() {
+  const n = MINI.net;
+  if (!n || n.st === 'gone') return;
+  n.st = 'gone';
+  if (MINI.cur.kind === 'race') { if (!n.opDone) { n.opDone = { gone: true }; mgRaceResult(); } }
+  else if (MINI.st === 'play') mgShowResult({ head: 'かち', lines: ['相手が抜けました'], good: true });
+}
+function mgNetData(d) {
+  const n = MINI.net, g = MINI.cur;
+  if (!d) return;
+  switch (d.k) {
+    case 'act': if (MINI.st === 'play' && MINI.seat === 0 && g.onAct) g.onAct(1, d.a); break;
+    case 's':
+      if (MINI.st !== 'play' || MINI.seat === 0) break;
+      MINI.t = d.t; g.apply(d.s);
+      for (const s of d.snd) mgSnd(s === 'good' ? 'bad' : s === 'bad' ? 'good' : s);
+      for (const f of d.fx) mgBurst(...f);
+      break;
+    case 'fin': if (MINI.st === 'play') mgShowResult(d.r); break;
+    case 'p': n.op = d.v; break;
+    case 'done': n.opDone = { sc: d.sc }; mgRaceResult(); break;
+    case 'again': n.again[1] = true; mgTryAgain(); break;
+    case 'go': if (MINI.seat === 1) mgPlay(d.seed); break;
+  }
+}
+function mgTryAgain() {
+  const n = MINI.net;
+  if (n.again[0] && n.again[1] && MINI.seat === 0) { const seed = Math.random() * 1e9 | 0; mgSendD({ k: 'go', seed }); mgPlay(seed); }
+}
+// 毎フレーム: 親はようすを、記録勝負では途中経過を送る
+function mgNetTick(dt) {
+  const n = MINI.net, g = MINI.cur;
+  if (!mgHuman() || MINI.st !== 'play') return;
+  n.sendT -= dt;
+  if (n.sendT > 0) return;
+  if (g.kind === 'duel' && MINI.seat === 0) {
+    n.sendT = 0.05;
+    mgSendD({ k: 's', t: MINI.t, s: g.snap(), snd: n.snd, fx: n.fx });
+    n.snd = []; n.fx = [];
+  } else if (g.kind === 'race') {
+    n.sendT = 0.2;
+    if (g.prog) mgSendD({ k: 'p', v: g.prog() });
+  }
 }
 
 function mgButton(id) {
-  if (id === 'mgBack') { if (MINI.st === 'menu') { G.screen = 'title'; G.title.mode = 'menu'; } else { MINI.st = 'menu'; MINI.cur = null; } return true; }
-  if (id === 'mgGo' || id === 'mgAgain') { mgPlay(); return true; }
-  if (id === 'mgMenu') { MINI.st = 'menu'; MINI.cur = null; return true; }
+  if (id === 'mgBack') {
+    if (MINI.st === 'menu') { G.screen = 'title'; G.title.mode = 'menu'; }
+    else if (MINI.st === 'wait' || MINI.st === 'join') { mgNetEnd(); codeInput.blur(); MINI.st = 'intro'; }
+    else { mgNetEnd(); MINI.st = 'menu'; MINI.cur = null; }
+    return true;
+  }
+  if (id === 'mgGo') { mgNetEnd(); mgUseStage(MINI.cur); mgPlay(); return true; }
+  if (id === 'mgAgain') {
+    const n = MINI.net;
+    if (mgHuman()) { if (!n.again[0]) { n.again[0] = true; mgSendD({ k: 'again' }); mgTryAgain(); } }
+    else { if (n && n.st !== 'cpu') mgNetEnd(); mgUseStage(MINI.cur); mgPlay(); }
+    return true;
+  }
+  if (id === 'mgNetQ') { mgNetStart('quick'); return true; }
+  if (id === 'mgNetC') { mgNetStart('create'); return true; }
+  if (id === 'mgNetJ') { mgNetStart('join'); return true; }
+  if (id === 'mgJoinGo') { mgJoinGo(); return true; }
+  if (id === 'mgCode') { codeInput.focus(); return true; }
+  if (id === 'mgMenu') { mgNetEnd(); MINI.st = 'menu'; MINI.cur = null; return true; }
   if (/^mgDiff\d$/.test(id)) { G.diff = +id.slice(6); try { localStorage.setItem('dtb-diff', G.diff); } catch (e) {} return true; }
   if (/^mgG\d+$/.test(id)) { mgStart(MINI.games[+id.slice(3)]); return true; }
   if (MINI.cur && MINI.cur.button) return MINI.cur.button(id);
@@ -342,7 +519,12 @@ function mgFrame(ctx, dt, now, vw, vh) {
   UI.buttons = [];
   if (MINI.st === 'menu' || !MINI.cur) { mgMenu(ctx, vw, vh, now, dt); return; }
   const g = MINI.cur;
-  if (MINI.st === 'play') { MINI.t += dt; g.update(dt); }
+  if (MINI.st === 'play') {
+    MINI.t += dt;
+    if (mgHost() || g.kind !== 'duel') g.update(dt);
+    else if (g.guest) g.guest(dt);
+    mgNetTick(dt);
+  }
   else if (MINI.st === 'result') { MINI.resT += dt; if (g.idle) g.idle(dt); }
   else if (g.idle) g.idle(dt);
   mgFxStep(dt, g.ground);
@@ -350,7 +532,10 @@ function mgFrame(ctx, dt, now, vw, vh) {
   const big = UI.big;
   button(ctx, 'mgBack', 'もどる', 6, 6, big ? 64 : 50, big ? 24 : 18, { band: COL.inkSoft, size: big ? 12 : 10 });
   if (MINI.st === 'play' && g.hud) g.hud(ctx, vw, vh);
+  // 記録勝負: 相手の今の記録を下に出す
+  if (g.kind === 'race' && mgHuman() && MINI.net.op && MINI.net.op.s && (MINI.st === 'play' || MINI.st === 'result')) tape(ctx, '相手  ' + MINI.net.op.s, vw / 2, vh - 22, 10, { center: true, pad: 7 });
   if (MINI.st === 'intro') mgIntro(ctx, vw, vh, g);
+  if (MINI.st === 'wait' || MINI.st === 'join') mgWait(ctx, vw, vh, g);
   if (MINI.st === 'result' && MINI.resT > 0.6) mgResult(ctx, vw, vh, g);
 }
 
@@ -367,7 +552,8 @@ function mgDiffRow(ctx, x, y, w) {
 function mgIntro(ctx, vw, vh, g) {
   const big = UI.big, cw = Math.min(300, vw - 16);
   const lines = [].concat(...g.howto.map(l => mgWrap(l, cw - 24, 10)));
-  const ch = 44 + lines.length * 15 + (g.cpu ? (big ? 32 : 25) : 0) + (big ? 38 : 30);
+  const bh = big ? 28 : 21, nb = g.kind ? (big ? 26 : 20) : 0;
+  const ch = 44 + lines.length * 15 + (g.cpu ? (big ? 32 : 25) : 0) + bh + 9 + (nb ? nb * 2 + 14 : 0);
   const x = Math.floor((vw - cw) / 2), y = Math.max(28, Math.floor((vh - ch) / 2));
   card(ctx, x, y, cw, ch, { ruled: 22 });
   txt(ctx, g.name, x + cw / 2, y + 4, 14, COL.ink, true, 'c');
@@ -375,10 +561,48 @@ function mgIntro(ctx, vw, vh, g) {
   for (const l of lines) { txt(ctx, l, x + 12, yy, 10, COL.ink, false); yy += 15; }
   yy += 4;
   if (g.cpu) yy += mgDiffRow(ctx, x + 12, yy, cw - 24) + 8;
-  button(ctx, 'mgGo', 'はじめる', x + 12, yy, cw - 24, big ? 28 : 21, { band: COL.red });
+  button(ctx, 'mgGo', g.kind ? 'ひとりで遊ぶ' : 'はじめる', x + 12, yy, cw - 24, bh, { band: COL.red });
+  if (nb) {
+    yy += bh + 6;
+    const w2 = Math.floor((cw - 30) / 2);
+    button(ctx, 'mgNetQ', 'ランダムマッチ', x + 12, yy, cw - 24, nb, { band: '#c9a53f', size: big ? 12 : 10 });
+    yy += nb + 4;
+    button(ctx, 'mgNetC', '友達とルーム', x + 12, yy, w2, nb, { band: COL.blue, size: big ? 12 : 10 });
+    button(ctx, 'mgNetJ', 'コードで参加', x + 18 + w2, yy, w2, nb, { band: COL.inkSoft, size: big ? 12 : 10 });
+  }
+}
+
+// オンラインの待ち画面とコード入力
+function mgWait(ctx, vw, vh, g) {
+  const n = MINI.net, big = UI.big, cw = Math.min(260, vw - 16), ch = (big ? 132 : 118) + (MINI.st === 'wait' && n && n.kind === 'create' ? 16 : 0);
+  if (!n) return;
+  const x = Math.floor((vw - cw) / 2), y = Math.max(28, Math.floor((vh - ch) / 2));
+  card(ctx, x, y, cw, ch, { ruled: 22 });
+  txt(ctx, g.name, x + cw / 2, y + 4, 14, COL.ink, true, 'c');
+  const bw = cw - 24, bh = big ? 24 : 19;
+  if (MINI.st === 'join') {
+    txt(ctx, n.err || '部屋コードを入力', x + cw / 2, y + 30, 10, n.err ? COL.red : COL.inkSoft, false, 'c');
+    const code = (G.title.code + '____').slice(0, 4).split('').join(' ');
+    const tp = tape(ctx, code, x + cw / 2, y + 46, 18, { center: true, pad: 10 });
+    UI.buttons.push({ id: 'mgCode', x: tp.x, y: tp.y, w: tp.w, h: tp.h });
+    button(ctx, 'mgJoinGo', '参加する', x + 12, y + ch - bh - 10, bw, bh, { band: COL.red, disabled: G.title.code.length !== 4 });
+    return;
+  }
+  const dots = '.'.repeat(1 + Math.floor(performance.now() / 400) % 3);
+  if (n.kind === 'create') {
+    txt(ctx, '部屋コード', x + cw / 2, y + 30, 10, COL.inkSoft, false, 'c');
+    tape(ctx, n.code ? n.code.split('').join(' ') : '....', x + cw / 2, y + 46, 18, { center: true, pad: 10 });
+    txt(ctx, '友達に伝えてください。待っています' + dots, x + cw / 2, y + 80, 10, COL.ink, false, 'c');
+  } else {
+    const left = Math.max(0, Math.ceil(20 - (performance.now() - n.since) / 1000));
+    txt(ctx, '相手をさがしています' + dots, x + cw / 2, y + 38, 11, COL.ink, true, 'c');
+    txt(ctx, n.code ? 'だれも来なければ ' + left + ' 秒後に CPU と対戦' : '接続しています', x + cw / 2, y + 60, 10, COL.inkSoft, false, 'c');
+  }
+  button(ctx, 'mgBack', 'やめる', x + 12, y + ch - bh - 10, bw, bh, { band: COL.inkSoft });
 }
 
 function mgResult(ctx, vw, vh, g) {
+  if (!MINI.result) { centerCard(ctx, vw, vh, [['相手の記録を待っています', 12, COL.ink, true]], {}); return; }
   const r = MINI.result, big = UI.big, cw = Math.min(250, vw - 16);
   const ch = 48 + r.lines.length * 15 + (big ? 36 : 28);
   const x = Math.floor((vw - cw) / 2), y = Math.max(28, Math.floor((vh - ch) / 2));
@@ -388,7 +612,8 @@ function mgResult(ctx, vw, vh, g) {
   for (const l of r.lines) { txt(ctx, l, x + cw / 2, yy, 10, COL.ink, false, 'c'); yy += 15; }
   yy += 4;
   const bw = Math.floor((cw - 30) / 2), bh = big ? 26 : 20;
-  button(ctx, 'mgAgain', 'もう一度', x + 10, yy, bw, bh, { band: COL.red, size: big ? 12 : 11 });
+  const n = MINI.net, waitOp = mgHuman() && n.again[0];
+  button(ctx, 'mgAgain', waitOp ? '相手を待つ' : 'もう一度', x + 10, yy, bw, bh, { band: COL.red, size: big ? 12 : 11, disabled: (n && n.st === 'gone') || waitOp });
   button(ctx, 'mgMenu', 'えらぶ', x + 20 + bw, yy, bw, bh, { band: COL.inkSoft, size: big ? 12 : 11 });
 }
 
@@ -443,14 +668,14 @@ function mgIcon(key, w, h, draw) {
     const c = makeCanvas(w, h), g = c.getContext('2d');
     g.imageSmoothingEnabled = false;
     const put = (s, x, y, z) => {
-      const sx = Math.round(w / 2 + toSX(x, y)), sy = Math.round(h / 2 + toSY(x, y, z || 0));
+      const [ax, ay] = mgScreen(x, y, z || 0);
       if (s.sh) {
-        const zz = z || 0, gx = x + zz * KX, gy = y + zz * KY;
+        const zz = z || 0, [gx, gy] = mgScreen(x + zz * VKX, y + zz * VKY, 0);
         g.globalAlpha = 0.3;
-        g.drawImage(mgTint(s.sh), Math.round(w / 2 + toSX(gx, gy)) - s.sax, Math.round(h / 2 + toSY(gx, gy, 0)) - s.say);
+        g.drawImage(mgTint(s.sh), Math.round(w / 2 + gx) - s.sax, Math.round(h / 2 + gy) - s.say);
         g.globalAlpha = 1;
       }
-      g.drawImage(s.c, sx - s.ax, sy - s.ay);
+      g.drawImage(s.c, Math.round(w / 2 + ax) - s.ax, Math.round(h / 2 + ay) - s.ay);
     };
     draw(put, g);
     return { c };
@@ -497,7 +722,11 @@ function mgPadDir() {
   if (k.has('KeyS') || k.has('ArrowDown')) sy += 1;
   if (sx || sy) { const l = Math.hypot(sx, sy); sx /= l; sy /= l; }
   if (MGPAD.id !== null) { sx = MGPAD.kx / 16; sy = MGPAD.ky / 16; }
-  return screenToWorldDir(sx, sy);
+  const m = Math.min(1, Math.hypot(sx, sy)), l = Math.hypot(sx, sy);
+  if (!l) return [0, 0];
+  // 画面の向きがそのままゲーム座標の向き(相手側から見るときは逆)
+  const f = MINI.flip ? -1 : 1;
+  return [sx / l * m * f, sy / l * m * f];
 }
 function mgPadDraw(ctx, vw, vh, label) {
   if (!G.touch) { txt(ctx, 'WASD / 矢印で移動' + (label ? '   Space: ' + label : ''), 8, vh - 16, 9, '#efe8d8', true); return; }

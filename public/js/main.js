@@ -52,6 +52,7 @@ function connect(then) {
   ws.onopen = then;
   ws.onmessage = ev => onMsg(JSON.parse(ev.data));
   ws.onclose = () => {
+    if (G.screen === 'mini') { ws = null; mgNetClosed(); return; }
     if (G.screen !== 'title') { G.screen = 'title'; G.title.mode = 'menu'; G.title.error = '接続が切れました'; }
     ws = null;
   };
@@ -59,6 +60,7 @@ function connect(then) {
 function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 
 function onMsg(m) {
+  if (m.t.startsWith('mg')) { mgNetMsg(m); return; }
   if (m.t === 'err') { G.title.error = m.msg; return; }
   if (m.t === 'room') {
     G.room = m; G.me = m.you;
@@ -166,14 +168,15 @@ function sendInput(force) {
 
 window.addEventListener('keydown', e => {
   AUDIO.init();
+  const mgJ = G.screen === 'mini' && MINI.st === 'join';
   if (document.activeElement === codeInput) {
-    if (e.key === 'Enter' && G.title.code.length === 4) doJoin();
+    if (e.key === 'Enter' && G.title.code.length === 4) mgJ ? mgJoinGo() : doJoin();
     return;
   }
-  if (G.screen === 'title' && G.title.mode === 'join') {
+  if ((G.screen === 'title' && G.title.mode === 'join') || mgJ) {
     if (/^Key[A-Z]$/.test(e.code) && G.title.code.length < 4) { G.title.code += e.code.slice(3); codeInput.value = G.title.code; }
     else if (e.key === 'Backspace') { G.title.code = G.title.code.slice(0, -1); codeInput.value = G.title.code; }
-    else if (e.key === 'Enter' && G.title.code.length === 4) doJoin();
+    else if (e.key === 'Enter' && G.title.code.length === 4) mgJ ? mgJoinGo() : doJoin();
     return;
   }
   if (e.repeat) { e.preventDefault(); return; }

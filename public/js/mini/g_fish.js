@@ -27,7 +27,7 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
   }
   const clipSpr = (c, a, tilt) => mgSpr('fc' + c + SPR.yawIndex(a) + (tilt ? 't' : ''), () => {
     const mat = CLIPMAT[c];
-    return bake(mgModel('fClip', smallClip), { yaw: SPR.yawIndex(a) / SPR.YAWS * Math.PI * 2, pitch: tilt ? 1.2 : 0, remap: mat ? { [M.metal]: M[mat] } : null });
+    return mgBake(mgModel('fClip', smallClip), { yaw: SPR.yawIndex(a) / SPR.YAWS * Math.PI * 2, pitch: tilt ? 1.2 : 0, remap: mat ? { [M.metal]: M[mat] } : null });
   });
   function magnetModel(mat) {
     return makeModel(mgScale({
@@ -44,10 +44,10 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
       origin: [-0.45, -0.18, 0],
     }, 1.6));
   }
-  const magSpr = (team) => mgSpr('fMag' + team, () => bake(mgModel('fMag' + team, () => magnetModel(team ? 'blue' : 'red')), { yaw: -Math.PI / 4 }));
+  const magSpr = (team) => mgSpr('fMag' + team, () => mgBake(mgModel('fMag' + team, () => magnetModel(team ? 'blue' : 'red')), { yaw: 0 }));
 
   const G_ = {
-    name: 'クリップ釣り', tint: COL.blue, cpu: true,
+    name: 'クリップ釣り', kind: 'duel', tint: COL.blue, cpu: true,
     howto: [
       'トレイをタップすると、磁石がそこへ下りてクリップを拾います。',
       'ペン立てをタップすると、運んだクリップを入れます。',
@@ -94,13 +94,16 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
       m.tx = x; m.ty = y; m.st = 'move';
     },
     down(sx, sy) {
-      const m = this.mag[0];
       const [cx, cy] = mgToWorld(sx, sy, CUP.h);
-      if (Math.hypot(cx - CUP.x, cy - CUP.y) < CUP.r + 0.6) { this.order(m, CUP.x, CUP.y); m.goCup = true; mgSnd('tap'); return; }
-      const [x, y] = mgToWorld(sx, sy, FLOOR);
-      m.goCup = false;
-      this.order(m, Math.max(TR.x0 + 0.4, Math.min(TR.x1 - 0.4, x)), Math.max(TR.y0 + 0.4, Math.min(TR.y1 - 0.4, y)));
+      if (Math.hypot(cx - CUP.x, cy - CUP.y) < CUP.r + 0.6) mgInput({ cup: 1 });
+      else { const [x, y] = mgToWorld(sx, sy, FLOOR); mgInput({ x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 }); }
       mgSnd('tap');
+    },
+    onAct(seat, a) {
+      const m = this.mag[seat];
+      if (a.cup) { this.order(m, CUP.x, CUP.y); m.goCup = true; return; }
+      m.goCup = false;
+      this.order(m, Math.max(TR.x0 + 0.4, Math.min(TR.x1 - 0.4, +a.x || 0)), Math.max(TR.y0 + 0.4, Math.min(TR.y1 - 0.4, +a.y || 0)));
     },
     cpu(m, dt) {
       m.think -= dt;
@@ -120,7 +123,7 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
       if (best) { this.order(m, best.x, best.y); m.goCup = false; }
     },
     update(dt) {
-      this.cpu(this.mag[1], dt);
+      if (mgCpu(1)) this.cpu(this.mag[1], dt);
       for (const m of this.mag) this.stepMag(m, dt);
       for (const c of this.clips) {
         if (c.held) {
@@ -136,12 +139,12 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
       for (let i = this.clips.length - 1; i >= 0; i--) if (this.clips[i].gone) { this.clips.splice(i, 1); this.addClip(); }
       for (let i = this.pops.length - 1; i >= 0; i--) { this.pops[i].t += dt; if (this.pops[i].t > 0.9) this.pops.splice(i, 1); }
       if (MINI.t >= TIME) {
-        const a = this.mag[0].score, b = this.mag[1].score;
-        mgFinish({ head: a > b ? 'かち' : a < b ? 'まけ' : '引き分け', lines: ['あなた ' + a + ' 点  /  CPU ' + b + ' 点'], good: a >= b });
+        const S = this.mag.map(m => m.score);
+        mgFinish((seat) => { const a = S[seat], b = S[1 - seat]; return { head: a > b ? 'かち' : a < b ? 'まけ' : '引き分け', lines: ['あなた ' + a + ' 点  /  ' + mgVs(seat) + ' ' + b + ' 点'], good: a >= b }; });
       }
     },
     stepMag(m, dt) {
-      const sp = m.team ? mgLv(3.4, 4.6, 5.8) : 6.5;
+      const sp = mgCpu(m.team) ? mgLv(3.4, 4.6, 5.8) : 6.5;
       const dx = m.tx - m.x, dy = m.ty - m.y, d = Math.hypot(dx, dy);
       if (m.st === 'move') {
         if (m.z < HIGH) { m.z = Math.min(HIGH, m.z + dt * 6); return; }
@@ -167,7 +170,7 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
           for (const c of m.carry.slice()) { pts += PTS[c.c]; this.release(m, c); }
           m.score += pts;
           this.pops.push({ x: CUP.x, y: CUP.y, z: CUP.h + 1.6, t: 0, s: '+' + pts, team: m.team });
-          mgSnd(m.team ? 'deliver' : 'good');
+          mgSnd(m.team === MINI.seat ? 'good' : 'deliver');
         }
         m.st = 'idle';
       }
@@ -175,13 +178,38 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
     },
     release(m, c) { m.carry.splice(m.carry.indexOf(c), 1); c.held = null; c.vz = 0; },
     idle() {},
+    snap() {
+      const r = (v) => Math.round(v * 100) / 100;
+      return {
+        c: this.clips.map(c => [r(c.x), r(c.y), r(c.z), r(c.a), c.c, c.held ? c.held.team : -1]),
+        m: this.mag.map(m => [r(m.x), r(m.y), r(m.z), m.st, m.score, r(m.tx), r(m.ty), m.goCup ? 1 : 0, r(m.sway)]),
+        p: this.pops.map(p => [p.s, p.team, r(p.t)]),
+      };
+    },
+    apply(s) {
+      this.net = s;
+      this.clips = s.c.map((a, i) => {
+        const o = this.clips[i] && this.clips[i].c === a[4] ? this.clips[i] : {};
+        return Object.assign(o, { x: o.x === undefined || a[5] < 0 ? a[0] : o.x, y: o.y === undefined || a[5] < 0 ? a[1] : o.y, z: o.z === undefined || a[5] < 0 ? a[2] : o.z, a: a[3], c: a[4], held: a[5] >= 0 ? this.mag[a[5]] : null, t: a });
+      });
+      s.m.forEach((a, i) => { const m = this.mag[i]; [, , , m.st, m.score, m.tx, m.ty] = a; m.goCup = !!a[7]; m.sway = a[8]; });
+      this.pops = s.p.map(p => ({ x: CUP.x, y: CUP.y, z: CUP.h + 1.6, s: p[0], team: p[1], t: p[2] }));
+    },
+    guest(dt) {
+      const s = this.net;
+      if (!s) return;
+      const k = Math.min(1, dt * 14);
+      s.m.forEach((a, i) => { const m = this.mag[i]; m.x += (a[0] - m.x) * k; m.y += (a[1] - m.y) * k; m.z += (a[2] - m.z) * k; });
+      for (const c of this.clips) if (c.held) { c.x += (c.t[0] - c.x) * k; c.y += (c.t[1] - c.y) * k; c.z += (c.t[2] - c.z) * k; }
+      for (const p of this.pops) p.t += dt;
+    },
     draw(ctx, vw, vh) {
       mgCamera(vw, vh, 7.4, 4, 0.6, 18);
       const objs = [];
-      for (const c of this.clips) objs.push({ s: clipSpr(c.c, c.a, !!c.held), x: c.x, y: c.y, z: c.z, g: FLOOR, k: c.held ? c.held.x + c.held.y + 0.01 : c.x + c.y - 0.3 });
+      for (const c of this.clips) objs.push({ s: clipSpr(c.c, c.a, !!c.held), x: c.x, y: c.y, z: c.z, g: FLOOR, k: c.held ? mgDepth(c.held.x, c.held.y) + 0.01 : mgDepth(c.x, c.y) - 0.3 });
       for (const m of this.mag) {
         const sw = Math.sin(MINI.t * 9) * m.sway * 0.12;
-        objs.push({ s: magSpr(m.team), x: m.x + sw, y: m.y - sw, z: m.z, g: this.ground(m.x, m.y), k: m.x + m.y });
+        objs.push({ s: magSpr(m.team), x: m.x + sw, y: m.y - sw, z: m.z, g: this.ground(m.x, m.y) });
       }
       mgDraw(ctx, vw, vh, objs, (c) => {
         for (const m of this.mag) {
@@ -200,8 +228,9 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
       return x >= TR.x0 && x <= TR.x1 && y >= TR.y0 && y <= TR.y1 ? FLOOR : 0;
     },
     hud(ctx, vw, vh) {
-      mgHudNote(ctx, 6, 30, 'あなた', String(this.mag[0].score), COL.noteR, COL.noteRDark);
-      mgHudNote(ctx, vw - 6, 30, 'CPU', String(this.mag[1].score), COL.noteB, COL.noteBDark, true);
+      const me = MINI.seat;
+      mgHudNote(ctx, 6, 30, mgName(me), String(this.mag[me].score), me ? COL.noteB : COL.noteR, me ? COL.noteBDark : COL.noteRDark);
+      mgHudNote(ctx, vw - 6, 30, mgName(1 - me), String(this.mag[1 - me].score), me ? COL.noteR : COL.noteB, me ? COL.noteRDark : COL.noteBDark, true);
       mgHudTag(ctx, vw, 'のこり ' + Math.max(0, Math.ceil(TIME - MINI.t)) + ' 秒');
     },
   };

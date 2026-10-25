@@ -4,8 +4,9 @@
 defMat('silver', ['#d5d9dc', '#b3b9bd', '#8e959a'], '#4d5357', 'metal');
 
 (function () {
-  const RU = { x0: 0, y0: 0, x1: 21, y1: 3.2 }, TOP = 0.14;
-  const TG = { x: 3.4, y: 1.6 }, START = { x: 19.2, y: 1.6 };
+  // 定規は奥(画面の上)へのびる。的が奥、投げる位置が手前
+  const RU = { x0: 0, y0: 0, x1: 3.2, y1: 21 }, TOP = 0.14, LEN = 21, WID = 3.2;
+  const TG = { x: 1.6, y: 3.4 }, START = { x: 1.6, y: 19.2 };
   const STONES = 4, FRIC = 3.2, VMAX = 9.5, MAXP = 3.4;
 
   function coinModel(mat) {
@@ -20,10 +21,10 @@ defMat('silver', ['#d5d9dc', '#b3b9bd', '#8e959a'], '#4d5357', 'metal');
       },
     });
   }
-  const coin = (team) => mgSpr('cu' + team, () => bake(mgModel('cuCoin' + team, () => coinModel(team ? 'silver' : 'copper')), {}));
+  const coin = (team) => mgSpr('cu' + team, () => mgBake(mgModel('cuCoin' + team, () => coinModel(team ? 'silver' : 'copper')), {}));
 
   const G_ = {
-    name: '定規カーリング', tint: '#c99a6a', cpu: true,
+    name: '定規カーリング', tint: '#c99a6a', cpu: true, kind: 'duel', noFlip: true,
     howto: [
       '手前の硬貨から指を引いて、はなすと滑ります。',
       '交代で4枚ずつ。最後に的の中心に一番近い色が、',
@@ -31,27 +32,29 @@ defMat('silver', ['#d5d9dc', '#b3b9bd', '#8e959a'], '#4d5357', 'metal');
     ],
     stageDef() {
       return {
-        cx: 11, cy: 1.6,
+        cx: 1.6, cy: 11,
         items: [{ x0: RU.x0, y0: RU.y0, x1: RU.x1, y1: RU.y1, z: 0, h: TOP, r: 0.12, edge: hexRGB('#f1e3c4'),
-          top(x, y, px, py) {
+          top(xn, yn, px, py) {
+            // 長さ方向を x、幅方向を y として塗る(幅の手前側 = 画面の右の縁に目盛り)
+            const x = yn, y = xn;
             let col = mgTone(['#e9d3a8', '#dcc394', '#cbb07f', '#b99c6c'].map(hexRGB), 0.8 + (vnoise(x * 0.4, y * 2) - 0.5) * 0.5 + (Math.sin(y * 11 + vnoise(x * 0.25, y) * 5) > 0.92 ? 1 : 0), px, py);
             // 目盛り(手前の縁)
-            const fy = RU.y1 - y, cm = (RU.x1 - 0.5 - x) / 0.7;
+            const fy = WID - y, cm = (LEN - 0.5 - x) / 0.7;
             if (cm > 0 && cm < 29.2) {
               const len = Math.abs(cm - Math.round(cm)) < 0.07 ? (Math.round(cm) % 5 === 0 ? 0.55 : 0.35) : (Math.abs(cm * 2 - Math.round(cm * 2)) < 0.14 ? 0.2 : 0);
-              if (len && fy < len && mgCross((a) => (RU.x1 - 0.5 - a) / 0.35, x, y, 1)) col = hexRGB('#4a3d2c');
+              if (len && fy < len && mgCross((a, b) => (LEN - 0.5 - b) / 0.35, xn, yn, 1)) col = hexRGB('#4a3d2c');
               if (fy < 0.04) col = hexRGB('#6b5a43');
             }
             // 的
-            const r = Math.hypot(x - TG.x, y - TG.y);
+            const r = Math.hypot(xn - TG.x, yn - TG.y);
             if (r < 1.25) {
               if (r < 0.32) col = mgTone(['#c45c4a', '#a3483b', '#8b3d32'].map(hexRGB), 0.6, px, py);
               else if (r < 0.78) col = mgTone(['#f1ece0', '#e2dccf', '#d1cbbd'].map(hexRGB), 0.6, px, py);
               else col = mgTone(['#5f84ab', '#4a6c91', '#3d5a7a'].map(hexRGB), 0.6, px, py);
-              if (mgCross((a, b) => Math.hypot(a - TG.x, b - TG.y), x, y, 100) || Math.abs(r - 1.25) < 0.03) col = hexRGB('#3a342d');
+              if (mgCross((a, b) => Math.hypot(a - TG.x, b - TG.y), xn, yn, 100) || Math.abs(r - 1.25) < 0.03) col = hexRGB('#3a342d');
             }
             // 投げる線
-            if (Math.abs(x - (START.x - 0.9)) < 0.03 && fy > 0.7) col = hexRGB('#a8493c');
+            if (Math.abs(yn - (START.y - 0.9)) < 0.05 && fy > 0.7) col = hexRGB('#a8493c');
             return col;
           },
           side: ['#c4a679', '#ae9064', '#8d744f'].map(hexRGB) }],
@@ -70,7 +73,7 @@ defMat('silver', ['#d5d9dc', '#b3b9bd', '#8e959a'], '#4d5357', 'metal');
     },
     onRu(x, y) { return x >= RU.x0 && x <= RU.x1 && y >= RU.y0 && y <= RU.y1; },
     down(sx, sy) {
-      if (this.phase !== 'aim' || this.turn !== 0) return;
+      if (this.phase !== 'aim' || this.turn !== MINI.seat) return;
       this.sel = this.active; this.aim = { dx: 0, dy: 0 }; mgSnd('tap');
     },
     move(sx, sy) {
@@ -84,8 +87,13 @@ defMat('silver', ['#d5d9dc', '#b3b9bd', '#8e959a'], '#4d5357', 'metal');
     up() {
       if (!this.sel) return;
       const l = Math.hypot(this.aim.dx, this.aim.dy);
-      if (l > 0.3) this.shoot(-this.aim.dx / l, -this.aim.dy / l, l / MAXP);
+      if (l > 0.3 && this.phase === 'aim' && this.turn === MINI.seat) mgInput({ ux: -this.aim.dx / l, uy: -this.aim.dy / l, p: l / MAXP });
       this.sel = null; this.aim = null;
+    },
+    onAct(seat, a) {
+      const l = Math.hypot(+a.ux || 0, +a.uy || 0);
+      if (this.phase !== 'aim' || this.turn !== seat || !l) return;
+      this.shoot(a.ux / l, a.uy / l, Math.max(0, Math.min(1, +a.p || 0)));
     },
     shoot(ux, uy, p) {
       const v = VMAX * (0.25 + 0.75 * p), c = this.active;
@@ -129,7 +137,7 @@ defMat('silver', ['#d5d9dc', '#b3b9bd', '#8e959a'], '#4d5357', 'metal');
       return best;
     },
     update(dt) {
-      if (this.phase === 'aim' && this.turn === 1) {
+      if (this.phase === 'aim' && mgCpu(this.turn)) {
         this.cpuT -= dt;
         if (!this.plan && this.cpuT < 0.4) this.plan = this.cpuPlan();
         if (this.plan && this.cpuT < 0) { const { a, p } = this.plan; this.plan = null; this.shoot(Math.cos(a), Math.sin(a), p); }
@@ -149,21 +157,41 @@ defMat('silver', ['#d5d9dc', '#b3b9bd', '#8e959a'], '#4d5357', 'metal');
     },
     endTurn() {
       // 投げる線を越えなかった硬貨は取りのぞく
-      this.coins = this.coins.filter(c => c.out || c.x < START.x - 2.4);
+      this.coins = this.coins.filter(c => c.out || c.y < START.y - 2.4);
       if (this.thrown[0] >= STONES && this.thrown[1] >= STONES) {
         this.phase = 'done';
-        const s = this.score(this.coins, 0), n = Math.round(s / 10);
-        const pts = Math.abs(n);
-        mgFinish(n > 0 ? { head: 'かち', lines: ['あなたの硬貨が ' + pts + ' 枚 内側'], good: true }
-          : n < 0 ? { head: 'まけ', lines: ['CPUの硬貨が ' + pts + ' 枚 内側'], good: false }
-            : { head: '引き分け', lines: ['的に残った硬貨がありません'], good: true });
+        const cs = this.coins;
+        mgFinish((seat) => {
+          const n = Math.round(this.score(cs, seat) / 10), pts = Math.abs(n);
+          return n > 0 ? { head: 'かち', lines: ['あなたの硬貨が ' + pts + ' 枚 内側'], good: true }
+            : n < 0 ? { head: 'まけ', lines: [mgVs(seat) + 'の硬貨が ' + pts + ' 枚 内側'], good: false }
+              : { head: '引き分け', lines: ['的に残った硬貨がありません'], good: true };
+        });
         return;
       }
       this.turn = 1 - this.turn; this.phase = 'aim'; this.cpuT = mgLv(1.2, 0.9, 0.7);
       this.spawn();
     },
+    snap() {
+      const r = (v) => Math.round(v * 100) / 100;
+      return { c: this.coins.map(c => [c.team, r(c.x), r(c.y), r(c.z), c.g, c.out ? 1 : 0, r(c.vx), r(c.vy)]), th: this.thrown, tu: this.turn, ph: this.phase };
+    },
+    apply(s) {
+      this.net = s;
+      this.coins = s.c.map((a, i) => {
+        const o = this.coins[i] && this.coins[i].team === a[0] ? this.coins[i] : { x: a[1], y: a[2], z: a[3] };
+        return Object.assign(o, { team: a[0], g: a[4], out: !!a[5], t: a });
+      });
+      this.active = this.coins[this.coins.length - 1];
+      if (this.active && this.active.y > START.y - 0.5) { this.active.x = START.x; this.active.y = START.y; }
+      this.thrown = s.th; this.turn = s.tu; this.phase = s.ph;
+    },
+    guest(dt) {
+      const k = Math.min(1, dt * 15);
+      for (const c of this.coins) { const a = c.t; if (!a) continue; a[1] += a[6] * dt; a[2] += a[7] * dt; c.x += (a[1] - c.x) * k; c.y += (a[2] - c.y) * k; c.z += (a[3] - c.z) * k; }
+    },
     draw(ctx, vw, vh) {
-      mgCamera(vw, vh, 11, 1.6, TOP, 4);
+      mgCamera(vw, vh, 1.6, 11, TOP, 6);
       const objs = this.coins.map(c => ({ s: coin(c.team), x: c.x, y: c.y, z: c.z, g: c.g }));
       mgDraw(ctx, vw, vh, objs, (g) => {
         if (this.sel && this.aim) {
@@ -176,16 +204,17 @@ defMat('silver', ['#d5d9dc', '#b3b9bd', '#8e959a'], '#4d5357', 'metal');
             mgDots(g, this.sel.x, this.sel.y, TOP + 0.1, this.sel.x + this.aim.dx, this.sel.y + this.aim.dy, TOP + 0.1, '#a8493c', 2);
           }
         }
-        if (this.phase === 'aim' && this.turn === 0 && !this.sel) {
+        if (this.phase === 'aim' && this.turn === MINI.seat && !this.sel && this.active) {
           const bob = Math.floor(performance.now() / 300) % 2, [sx, sy] = mgP(this.active.x, this.active.y, TOP + 0.9);
           drawMarker(g, sx, sy - bob, 0);
         }
       });
     },
     hud(ctx, vw, vh) {
-      mgHudNote(ctx, 6, 30, 'あなた のこり', String(STONES - this.thrown[0]), COL.noteR, COL.noteRDark);
-      mgHudNote(ctx, vw - 6, 30, 'CPU のこり', String(STONES - this.thrown[1]), COL.noteB, COL.noteBDark, true);
-      mgHudTag(ctx, vw, this.phase === 'move' ? '...' : this.turn === 0 ? 'あなたの番' : 'CPUの番');
+      const me = MINI.seat;
+      mgHudNote(ctx, 6, 30, mgName(me) + ' のこり', String(STONES - this.thrown[me]), me ? COL.noteB : COL.noteR, me ? COL.noteBDark : COL.noteRDark);
+      mgHudNote(ctx, vw - 6, 30, mgName(1 - me) + ' のこり', String(STONES - this.thrown[1 - me]), me ? COL.noteR : COL.noteB, me ? COL.noteRDark : COL.noteBDark, true);
+      mgHudTag(ctx, vw, this.phase === 'move' ? '...' : this.turn === me ? 'あなたの番' : mgName(1 - me) + 'の番');
     },
   };
   mgRegister(G_);

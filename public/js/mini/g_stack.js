@@ -2,8 +2,7 @@
 'use strict';
 
 (function () {
-  const D = [Math.SQRT1_2, -Math.SQRT1_2];   // 画面の横方向(ワールド)
-  const BASE = { half: (2.4 + 1.8) / Math.SQRT2, top: 1.1 };
+  const BASE = { half: 2.4, top: 1.1 };
   // 種類: L は画面横の長さ、W は奥行き、H は高さ
   const KINDS = [
     { id: 'eraser', L: 3.4, W: 1.8, H: 1.0 },
@@ -33,11 +32,11 @@
     return makeModel({ size: [K.L, K.W, K.H], vs: 0.06, smooth: 1.1, fill: boxFill(K.L, K.W, K.H, K.id === 'note' ? 0.06 : 0.12, fill) });
   }
   // 画面横に長い向き(yaw = -45°)。tip は倒れる途中の傾き(0..3)、dir は倒れる向き
-  const spr = (k, tip, dir) => mgSpr('st' + k + '|' + tip + '|' + dir, () => bake(mgModel('stK' + k, () => model(k)), { yaw: -Math.PI / 4, pitch: tip * 0.45 * (dir || 1), sink: -0.65 * tip }));
-  const sp = (s) => [s * D[0], s * D[1]];
+  const spr = (k, tip, dir) => mgSpr('st' + k + '|' + tip + '|' + dir, () => mgBake(mgModel('stK' + k, () => model(k)), { yaw: 0, pitch: tip * 0.45 * (dir || 1), sink: -0.65 * tip }));
+  const sp = (s) => [s, 0];   // 横位置 -> ゲーム座標
 
   const G_ = {
-    name: '文具つみ', tint: '#c56c5d',
+    name: '文具つみ', tint: '#c56c5d', kind: 'race',
     howto: [
       '左右に動く文具を、タップ(Space)で落とします。',
       '下の物からはみ出しすぎると、くずれて終わり。',
@@ -64,9 +63,9 @@
       this.next();
     },
     next() {
-      const k = Math.floor(Math.random() * KINDS.length);
+      const k = Math.floor(mgRand() * KINDS.length);
       const amp = 5.0, n = this.stack.length;
-      this.cur = { k, t: Math.random() * 6, s: 0, z: this.top + 3.2, vz: 0, drop: false, half: KINDS[k].L / 2, spd: 1.3 + Math.min(2.2, n * 0.12), amp };
+      this.cur = { k, t: mgRand() * 6, s: 0, z: this.top + 3.2, vz: 0, drop: false, half: KINDS[k].L / 2, spd: 1.3 + Math.min(2.2, n * 0.12), amp };
     },
     drop() { if (this.cur && !this.cur.drop && !this.over) { this.cur.drop = true; mgSnd('swish'); } },
     down() { this.drop(); },
@@ -90,7 +89,7 @@
       if (this.over && this.fall.every(f => f.z === 0) && !this.ended && this.overT > 1.2) {
         this.ended = true;
         const h = (this.top - BASE.top) * 2.6;
-        mgFinish({ head: this.stack.length + ' 個', lines: ['高さ ' + h.toFixed(1) + ' cm', 'ぴったり ' + this.perfect + ' 回'], good: true });
+        mgFinish({ head: this.stack.length + ' 個', score: this.stack.length, unit: ' 個', lines: ['高さ ' + h.toFixed(1) + ' cm', 'ぴったり ' + this.perfect + ' 回'], good: true });
       }
       if (this.over) this.overT += dt;
     },
@@ -116,9 +115,11 @@
       this.next();
     },
     topple(items, dir) {
-      for (const it of items) this.fall.push({ ...it, vz: 1, vs: dir * (2 + Math.random()), t: 0, dir });
+      for (const it of items) this.fall.push({ ...it, vz: 1, vs: dir * (2 + mgRand()), t: 0, dir });
       this.over = true; this.overT = 0; mgSnd('fall');
     },
+    prog() { return { s: this.stack.length + ' 個' }; },
+    cpuScore() { return Math.round(mgLv(6, 10, 15) + Math.random() * mgLv(4, 5, 6)); },
     draw(ctx, vw, vh) {
       mgCamera(vw, vh, 0, 0, this.camZ + 1.2, Math.round(vh * 0.04));
       const objs = [];

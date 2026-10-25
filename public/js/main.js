@@ -10,6 +10,7 @@ const codeInput = document.getElementById('code');
 const G = {
   screen: 'title',          // title / lobby / game
   title: { mode: 'menu', code: '', error: '' },
+  diff: 1,                  // CPUの強さ 0 やさしい / 1 ふつう / 2 つよい
   room: null, me: 0,
   snaps: [], offset: null, last: null,
   vw: 480, vh: 270, scale: 1,
@@ -23,6 +24,7 @@ const G = {
   demo: null,
   lastPh: null,
 };
+try { const d = +localStorage.getItem('dtb-diff'); if (d >= 0 && d <= 2 && localStorage.getItem('dtb-diff') !== null) G.diff = d; } catch (e) {}
 
 // ---------- 画面サイズ(整数倍で拡大) ----------
 function resize() {
@@ -256,11 +258,23 @@ function doJoin() {
   connect(() => send({ t: 'join', code }));
 }
 
+function startSolo() {
+  G.snaps = []; G.offset = null; G.last = null;
+  connect(() => send({ t: 'solo', diff: G.diff }));
+}
+
 function onButton(id) {
   switch (id) {
     case 'create': connect(() => send({ t: 'create' })); break;
     case 'quick': connect(() => send({ t: 'quick' })); break;
-    case 'solo': G.snaps = []; G.offset = null; G.last = null; connect(() => send({ t: 'solo' })); break;
+    case 'solo': G.title.mode = 'solo'; G.title.error = ''; break;
+    case 'diff0': case 'diff1': case 'diff2': {
+      G.diff = +id.slice(4);
+      try { localStorage.setItem('dtb-diff', G.diff); } catch (e) {}
+      if (G.screen === 'title') startSolo(); else send({ t: 'diff', diff: G.diff });
+      break;
+    }
+    case 'soloAgain': startSolo(); break;
     case 'join': G.title.mode = 'join'; G.title.code = ''; codeInput.value = ''; G.title.error = ''; if (!G.touch) codeInput.focus(); break;
     case 'codeField': codeInput.focus(); break;
     case 'joinGo': doJoin(); break;

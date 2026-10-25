@@ -91,13 +91,14 @@ function tape(ctx, s, x, y, size, opt) {
 // ボタン(見出し付きのカード)
 function button(ctx, id, label, x, y, w, h, opt) {
   opt = opt || {};
-  const down = UI.pressed === id, hov = UI.hover === id;
+  const down = UI.pressed === id || opt.sel, hov = UI.hover === id;
   const oy = down ? 1 : 0;
   if (!down) shadowBox(ctx, x, y, w, h, 2);
-  ctx.fillStyle = opt.disabled ? '#ddd6c6' : hov ? '#f8f4ea' : COL.paper;
+  ctx.fillStyle = opt.disabled ? '#ddd6c6' : opt.sel ? '#e6dcc6' : hov ? '#f8f4ea' : COL.paper;
   ctx.fillRect(x, y + oy, w, h);
   ctx.fillStyle = opt.band || COL.red; ctx.fillRect(x, y + oy, 3, h);
   ctx.fillStyle = COL.paperEdge; ctx.fillRect(x, y + oy + h - 1, w, 1); ctx.fillRect(x + w - 1, y + oy, 1, h);
+  if (opt.sel) { ctx.fillStyle = '#cbbfa6'; ctx.fillRect(x + 3, y + oy, w - 4, 1); ctx.fillRect(x + 3, y + oy, 1, h - 1); }
   const size = opt.size || 12;
   const t = textInfo(label, size, true);
   occludeText(x, y, w + 2, h + 2);
@@ -147,6 +148,13 @@ function drawTitle(ctx, vw, vh, st) {
     UI.buttons.push({ id: 'codeField', x: tp.x, y: tp.y, w: tp.w, h: tp.h });
     button(ctx, 'joinGo', '参加する', bx, by + 48, bw, big ? 26 : 18, { disabled: st.code.length !== 4 });
     button(ctx, 'back', '戻る', bx + bw / 2 - (big ? 40 : 30), by + (big ? 80 : 70), big ? 80 : 60, big ? 22 : 14, { size: big ? 12 : 10, band: COL.inkSoft });
+  } else if (st.mode === 'solo') {
+    card(ctx, bx - 14, by - 6, bw + 28, big ? 150 : 124, {});
+    txt(ctx, 'CPUの強さ', vw / 2, by, 10, COL.inkSoft, false, 'c');
+    button(ctx, 'diff0', 'やさしい', bx, by + 16, bw, bh, { band: '#7f9a6a' });
+    button(ctx, 'diff1', 'ふつう', bx, by + 16 + gap, bw, bh, { band: '#c9a53f' });
+    button(ctx, 'diff2', 'つよい', bx, by + 16 + gap * 2, bw, bh, { band: COL.red });
+    button(ctx, 'back', '戻る', bx + bw / 2 - (big ? 40 : 30), by + 22 + gap * 3, big ? 80 : 60, big ? 22 : 14, { size: big ? 12 : 10, band: COL.inkSoft });
   } else {
     button(ctx, 'solo', 'ひとりで遊ぶ', bx, by, bw, bh, { band: COL.inkSoft });
     button(ctx, 'quick', 'ランダムマッチ', bx, by + gap, bw, bh, { band: '#c9a53f' });
@@ -178,7 +186,7 @@ function drawEraserPiece(ctx, x, y, team, isMe) {
 
 function drawLobby(ctx, vw, vh, room, me) {
   UI.buttons = [];
-  const cw = Math.min(280, vw - 16), ch = UI.big ? 222 : 212;
+  const cw = Math.min(280, vw - 16), ch = UI.big ? 258 : 238;
   const x = Math.floor((vw - cw) / 2), y = Math.max(6, Math.floor((vh - ch) / 2) - 6);
   card(ctx, x, y, cw, ch, { ruled: 14 });
   txt(ctx, room.pub ? 'ランダムマッチ' : 'ロビー', x + 6, y + 2, 10, COL.inkSoft, true);
@@ -220,6 +228,14 @@ function drawLobby(ctx, vw, vh, room, me) {
   }
   button(ctx, 'leave', '退出', x + cw - 72, by, 62, UI.big ? 28 : 20, { band: COL.inkSoft, size: UI.big ? 12 : 10 });
   txt(ctx, 'チームの台紙を押すと移動', x + cw / 2, y + 158, 10, COL.inkSoft, false, 'c');
+  // CPUの強さ(ホストが選ぶ)
+  const dy = y + 176, dh = UI.big ? 26 : 18, dl = 58, dw = Math.floor((cw - 20 - dl - 8) / 3);
+  txt(ctx, 'CPUの強さ', x + 10, dy + Math.floor((dh - 12) / 2), 10, COL.inkSoft, true);
+  ['やさしい', 'ふつう', 'つよい'].forEach((name, i) => {
+    const sel = room.diff === i;
+    if (isHost) button(ctx, 'diff' + i, name, x + 10 + dl + i * (dw + 4), dy, dw, dh, { sel, size: 10, band: sel ? COL.ink : COL.inkSoft });
+    else if (sel) txt(ctx, name, x + 10 + dl, dy + Math.floor((dh - 12) / 2), 10, COL.ink, true);
+  });
 }
 
 // ---------- 試合中のHUD ----------
@@ -381,7 +397,7 @@ function drawResult(ctx, vw, vh, res, isHost, room) {
   for (let k = 0; k < 14; k++) ctx.fillRect(sx + Math.floor(hash2(k, 3) * sw), sy + Math.floor(hash2(k, 9) * 22), 1, 1);
   const bx = x + cw - 104;
   const rh = UI.big ? 26 : 20, rs = UI.big ? 12 : 10;
-  if (room && room.solo) button(ctx, 'solo', 'もう一度', bx, sy - (rh - 20), 94, rh, { band: COL.red, size: rs });
+  if (room && room.solo) button(ctx, 'soloAgain', 'もう一度', bx, sy - (rh - 20), 94, rh, { band: COL.red, size: rs });
   else if (isHost) button(ctx, 'toLobby', 'ロビーに戻る', bx, sy - (rh - 20), 94, rh, { band: COL.red, size: rs });
   else txt(ctx, 'ホストを待っています', bx + 47, sy + 5, 10, COL.inkSoft, false, 'c');
   button(ctx, 'leave', 'タイトルへ', x + cw - (UI.big ? 74 : 64), y + 4, UI.big ? 68 : 58, UI.big ? 20 : 15, { band: COL.inkSoft, size: 10 });

@@ -8,17 +8,17 @@
     MAP: { W: 16, H: 24 },    // 遊べる範囲(x: 0..W, y: 0..H)
 
     ROUNDS: 4,
-    ROUND_TIME: 180,          // 1ラウンドの制限時間
+    ROUND_TIME: 100,          // 1ラウンドの制限時間
     COUNTDOWN: 3,             // ラウンド開始前
-    INTERMISSION: 7,          // ラウンド間の集計表示
+    INTERMISSION: 5,          // ラウンド間の集計表示
     MATCH_WAIT: 30,           // ランダムマッチで人を待つ秒数(過ぎたらボットで埋めて開始)
 
-    BLOCKS: 12,               // 1ラウンドの資材数
+    BLOCKS: 8,                // 1ラウンドの資材数
     BOAT_CAPACITY: 2,         // 船1隻が同時に積める数
 
     BOAT: {
       radius: 0.55,
-      speed: 2.5,
+      speed: 2.8,
       accel: 7,
       turn: 9,                // 旋回速度(rad/s)
       loadSlow: 0.03,         // 積み荷1個ごとの減速率
@@ -29,10 +29,10 @@
       dashCd: 4,
       protectTime: 3.5,
       protectCd: 10,
-      pickInterval: 0.6,
+      pickInterval: 0.4,
       pickDelay: 1.0,         // 落ちた資材を拾い直せるまで
       pickRange: 1.0,
-      deliverInterval: 0.5,
+      deliverInterval: 0.35,
       deliverRange: 1.0,
     },
 

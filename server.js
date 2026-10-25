@@ -65,12 +65,12 @@ function roomInfo(room) {
 function broadcastRoom(room) {
   const players = roomInfo(room);
   for (const p of room.players) {
-    if (!p.bot) send(p.ws, { t: 'room', code: room.code, you: p.id, host: room.host, phase: room.phase, players, pub: !!room.pub, solo: !!room.solo, autoIn: room.autoAt ? Math.max(0, Math.ceil((room.autoAt - Date.now()) / 1000)) : 0 });
+    if (!p.bot) send(p.ws, { t: 'room', code: room.code, you: p.id, host: room.host, phase: room.phase, players, pub: !!room.pub, solo: !!room.solo, diff: room.diff, autoIn: room.autoAt ? Math.max(0, Math.ceil((room.autoAt - Date.now()) / 1000)) : 0 });
   }
 }
 
 function newRoom(conn) {
-  const r = { code: makeCode(), players: [], host: conn.id, phase: 'lobby', game: null, timer: null, pub: false, solo: false, autoAt: 0 };
+  const r = { code: makeCode(), players: [], host: conn.id, phase: 'lobby', game: null, timer: null, pub: false, solo: false, diff: 1, autoAt: 0 };
   rooms.set(r.code, r);
   addPlayer(r, conn, false);
   return r;
@@ -144,6 +144,7 @@ function handle(conn, m) {
       if (room) leave(conn);
       const r = newRoom(conn);
       r.solo = true;
+      r.diff = clampDiff(m.diff);
       startRoom(r);
       broadcastRoom(r);
       break;
@@ -163,6 +164,13 @@ function handle(conn, m) {
       const p = room.players.find(q => q.id === conn.id);
       const t = m.team ? 1 : 0;
       if (p && p.team !== t && teamCount(room, t) < 2) { p.team = t; broadcastRoom(room); }
+      break;
+    }
+    case 'diff': {
+      // CPUの強さ(ホストのみ、ロビー中)
+      if (!room || room.phase !== 'lobby' || room.host !== conn.id) return;
+      room.diff = clampDiff(m.diff);
+      broadcastRoom(room);
       break;
     }
     case 'start': {
@@ -269,7 +277,7 @@ const DT = 1 / C.TICK_HZ;
 
 function startGame(room) {
   room.phase = 'game';
-  room.game = { time: 0, round: -1, ph: 'count', t: 0, results: [], ents: [], blocks: [], ev: [] };
+  room.game = { time: 0, round: -1, ph: 'count', t: 0, results: [], ents: [], blocks: [], ev: [], lv: BOT_LEVELS[room.diff] || BOT_LEVELS[1] };
   for (const p of room.players) { p.seen.a = p.input.a; p.seen.b = p.input.b; }
   nextRound(room);
   clearInterval(room.timer);
@@ -615,11 +623,21 @@ function steer(e, tx, ty) {
   return [dx / d, dy / d];
 }
 
+// CPUの強さ。0 やさしい / 1 ふつう / 2 つよい
+const BOT_LEVELS = [
+  { think: 0.3, speed: 0.8, avoid: 0.2, dash: 0.03, protect: 0, lead: 0, charge: 0.06, range: 0.75, dive: 0, split: 3 },
+  { think: 0, speed: 1, avoid: 0.5, dash: 0.08, protect: 0.3, lead: 0.45, charge: 0.4, range: 1, dive: 0.02, split: 3 },
+  { think: 0, speed: 1, avoid: 0.9, dash: 0.12, protect: 0.6, lead: 0.45, charge: 0.4, range: 1, dive: 0.02, split: 30 },
+];
+function clampDiff(v) { v = Math.round(Number(v)); return v >= 0 && v <= 2 ? v : 1; }
+
 function press(p, key) { p.input[key] = (p.input[key] + 1) % 1000; }
 
 function botThink(g, e) {
-  const p = e.p, inp = p.input, ai = p.ai;
+  const p = e.p, inp = p.input, ai = p.ai, L = g.lv;
   ai.wob = (ai.wob || Math.random() * 10) + DT;
+  // 弱いCPUは考え直す間隔をあける(その間は前の入力のまま)
+  if (L.think > 0) { ai.wait = (ai.wait || 0) - DT; if (ai.wait > 0) return; ai.wait = L.think * (0.6 + Math.random() * 0.8); }
   if (e.role === 'b') {
     const sharks = g.ents.filter(o => o.role === 's');
     const free = g.blocks.filter(b => b.s === 0 || (b.s === 2 && g.time - b.t0 > C.BOAT.pickDelay * 1000));
@@ -636,36 +654,36 @@ function botThink(g, e) {
     for (const s of sharks) {
       const dx = e.x - s.x, dy = e.y - s.y, d = Math.hypot(dx, dy);
       near = Math.min(near, d);
-      if (d < 3 && d > 0.01) { const w = (3 - d) / 3 * 0.5; mx += dx / d * w; my += dy / d * w; }
+      if (d < 3 && d > 0.01) { const w = (3 - d) / 3 * L.avoid; mx += dx / d * w; my += dy / d * w; }
     }
     const l = Math.hypot(mx, my) || 1;
-    inp.mx = mx / l; inp.my = my / l;
-    if (e.cd1 <= 0 && (near < 3 || Math.hypot(tx - e.x, ty - e.y) > 7) && Math.random() < 0.08) press(p, 'a');
-    if (e.cd2 <= 0 && e.load.length >= 2 && near < 2.4 && Math.random() < 0.3) press(p, 'b');
+    inp.mx = mx / l * L.speed; inp.my = my / l * L.speed;
+    if (e.cd1 <= 0 && (near < 3 || Math.hypot(tx - e.x, ty - e.y) > 7) && Math.random() < L.dash) press(p, 'a');
+    if (e.cd2 <= 0 && e.load.length >= 2 && near < 2.4 && Math.random() < L.protect) press(p, 'b');
   } else {
     const boats = g.ents.filter(o => o.role === 'b');
     const mates = g.ents.filter(o => o.role === 's' && o !== e);
-    // 積み荷の多い船を優先。相方と同じ船は避ける
+    // 積み荷の多い船を優先。相方と同じ船は避ける(強いCPUは1隻ずつ必ず分担する)
     let best = null, bs = -1e9;
     for (const b of boats) {
       let s = b.load.length * 4 - Math.hypot(b.x - e.x, b.y - e.y) * 0.5;
       if (b.stun > 0 || b.imm > 0) s -= 6;
-      if (mates.some(m => m.p.ai.target === b.id)) s -= 3;
+      if (mates.some(m => m.p.ai.target === b.id)) s -= L.split;
       if (s > bs) { bs = s; best = b; }
     }
     ai.target = best ? best.id : null;
     if (!best) { inp.mx = 0; inp.my = 0; return; }
-    const lead = 0.45;
+    const lead = L.lead;
     const tx = best.x + best.vx * lead, ty = best.y + best.vy * lead;
     const [mx, my] = steer(e, tx, ty);
-    inp.mx = mx; inp.my = my;
     const d = Math.hypot(tx - e.x, ty - e.y);
-    const range = inFan(e.x, e.y) ? 5.2 : 3.8;
-    if (e.cd1 <= 0 && d < range && d > 1.4 && best.imm <= 0 && clearLine(e.x, e.y, tx, ty) && Math.random() < 0.4) {
+    inp.mx = mx * L.speed; inp.my = my * L.speed;
+    const range = (inFan(e.x, e.y) ? 5.2 : 3.8) * L.range;
+    if (e.cd1 <= 0 && d < range && d > 1.4 && best.imm <= 0 && clearLine(e.x, e.y, tx, ty) && Math.random() < L.charge) {
       inp.mx = (tx - e.x) / d; inp.my = (ty - e.y) / d;
       press(p, 'a');
     }
-    if (e.cd2 <= 0 && d > 4 && d < 9 && Math.random() < 0.02) press(p, 'b');
+    if (e.cd2 <= 0 && d > 4 && d < 9 && Math.random() < L.dive) press(p, 'b');
   }
 }
 

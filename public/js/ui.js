@@ -292,6 +292,7 @@ function skillButton(ctx, id, x, y, r, label, key, cd, cdMax, active, team, show
 
 function drawStick(ctx, x, y, kx, ky) {
   // マスキングテープの輪と、ゴムのつまみ
+  occludeText(x - 26, y - 26, 54, 54);
   disc(ctx, x + 2, y + 2, 24, COL.shadow, 9);
   disc(ctx, x, y, 24, '#8c7c58', 1);
   disc(ctx, x, y, 23, '#d8c79c', 8);

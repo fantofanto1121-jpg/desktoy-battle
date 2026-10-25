@@ -310,7 +310,7 @@ function dropBlocks(g, boat, n) {
     const b = g.blocks[boat.load.pop()];
     let lx = boat.x, ly = boat.y;
     for (let tries = 0; tries < 12; tries++) {
-      const a = Math.random() * Math.PI * 2, d = 1.2 + Math.random() * 1.2;
+      const a = Math.random() * Math.PI * 2, d = C.HIT.dropMin + Math.random() * (C.HIT.dropMax - C.HIT.dropMin);
       const x = boat.x + Math.cos(a) * d, y = boat.y + Math.sin(a) * d;
       if (x > 0.4 && y > 0.4 && x < W - 0.4 && y < H - 0.4 && !pointInSolid(x, y, 0.3)) { lx = x; ly = y; break; }
     }
@@ -327,9 +327,13 @@ function hitBoat(g, shark, boat, charge) {
   if (boat.prot > 0) {
     boat.vx = Math.cos(a) * H_.protectKnock; boat.vy = Math.sin(a) * H_.protectKnock;
     boat.imm = 0.6;
+    // ケースに弾かれたサメは少しのあいだ動けない
+    shark.stun = H_.caseStun; shark.spin = (Math.random() < 0.5 ? -1 : 1) * H_.spin * 0.6;
+    shark.wind = 0; shark.chg = 0;
+    shark.vx = -Math.cos(a) * H_.protectKnock * 1.5; shark.vy = -Math.sin(a) * H_.protectKnock * 1.5;
     g.ev.push(['block', boat.id]);
   } else {
-    dropBlocks(g, boat, charge ? 99 : 1);
+    dropBlocks(g, boat, charge ? H_.chargeDrop : 1);
     const k = charge ? H_.chargeKnock : H_.biteKnock;
     boat.vx = Math.cos(a) * k; boat.vy = Math.sin(a) * k;
     boat.stun = charge ? H_.chargeStun : H_.biteStun;
@@ -368,7 +372,7 @@ function simBoat(g, e, dt) {
   if (e.load.length < C.BOAT_CAPACITY && e.pick <= 0 && e.stun <= 0) {
     let best = null, bd = B.pickRange;
     for (const b of g.blocks) {
-      if (b.s === 0 || (b.s === 2 && g.time - b.t0 > 650)) {
+      if (b.s === 0 || (b.s === 2 && g.time - b.t0 > B.pickDelay * 1000)) {
         const d = Math.hypot(b.x - e.x, b.y - e.y);
         if (d < bd) { bd = d; best = b; }
       }
@@ -393,6 +397,15 @@ function simBoat(g, e, dt) {
 
 function simShark(g, e, dt) {
   const S = C.SHARK, inp = e.p.input;
+  if (e.stun > 0) {
+    e.stun -= dt;
+    e.dir += e.spin * dt;
+    e.vx *= 0.88; e.vy *= 0.88;
+    e.x += e.vx * dt; e.y += e.vy * dt;
+    collide(e, S.radius);
+    e.p.seen.a = inp.a; e.p.seen.b = inp.b;
+    return;
+  }
   if (e.wind > 0) {
     e.wind -= dt;
     e.vx *= 0.75; e.vy *= 0.75;
@@ -457,11 +470,11 @@ function tick(room) {
       for (const b of boats) {
         const touching = Math.hypot(b.x - s.x, b.y - s.y) < C.BOAT.radius + C.SHARK.radius + 0.08;
         if (!touching) continue;
-        if (b.imm <= 0) {
+        if (b.imm <= 0 && s.stun <= 0) {
           if (s.chg > 0) { hitBoat(g, s, b, true); s.chg = 0; s.vx *= 0.2; s.vy *= 0.2; }
           else if (s.bite <= 0 && s.wind <= 0) { hitBoat(g, s, b, false); s.bite = C.SHARK.biteCd; }
         }
-        separate(s, b, C.SHARK.radius, C.BOAT.radius);
+        if (b.imm <= 0 || b.prot > 0) separate(s, b, C.SHARK.radius, C.BOAT.radius);   // 無敵中の船はサメをすり抜ける
       }
     }
     for (let i = 0; i < g.ents.length; i++) for (let j = i + 1; j < g.ents.length; j++) {
@@ -609,7 +622,7 @@ function botThink(g, e) {
   ai.wob = (ai.wob || Math.random() * 10) + DT;
   if (e.role === 'b') {
     const sharks = g.ents.filter(o => o.role === 's');
-    const free = g.blocks.filter(b => b.s === 0 || (b.s === 2 && g.time - b.t0 > 650));
+    const free = g.blocks.filter(b => b.s === 0 || (b.s === 2 && g.time - b.t0 > C.BOAT.pickDelay * 1000));
     let tx, ty;
     if (e.load.length < C.BOAT_CAPACITY && free.length && !(e.load.length > 0 && free.every(b => Math.hypot(b.x - e.x, b.y - e.y) > 6))) {
       free.sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y));
@@ -623,7 +636,7 @@ function botThink(g, e) {
     for (const s of sharks) {
       const dx = e.x - s.x, dy = e.y - s.y, d = Math.hypot(dx, dy);
       near = Math.min(near, d);
-      if (d < 3 && d > 0.01) { const w = (3 - d) / 3 * 0.9; mx += dx / d * w; my += dy / d * w; }
+      if (d < 3 && d > 0.01) { const w = (3 - d) / 3 * 0.5; mx += dx / d * w; my += dy / d * w; }
     }
     const l = Math.hypot(mx, my) || 1;
     inp.mx = mx / l; inp.my = my / l;
@@ -648,7 +661,7 @@ function botThink(g, e) {
     inp.mx = mx; inp.my = my;
     const d = Math.hypot(tx - e.x, ty - e.y);
     const range = inFan(e.x, e.y) ? 5.2 : 3.8;
-    if (e.cd1 <= 0 && d < range && d > 1.4 && best.imm <= 0 && clearLine(e.x, e.y, tx, ty) && Math.random() < 0.25) {
+    if (e.cd1 <= 0 && d < range && d > 1.4 && best.imm <= 0 && clearLine(e.x, e.y, tx, ty) && Math.random() < 0.4) {
       inp.mx = (tx - e.x) / d; inp.my = (ty - e.y) / d;
       press(p, 'a');
     }

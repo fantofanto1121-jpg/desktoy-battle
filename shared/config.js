@@ -14,51 +14,56 @@
     MATCH_WAIT: 30,           // ランダムマッチで人を待つ秒数(過ぎたらボットで埋めて開始)
 
     BLOCKS: 12,               // 1ラウンドの資材数
-    BOAT_CAPACITY: 3,         // 船1隻が同時に積める数
+    BOAT_CAPACITY: 2,         // 船1隻が同時に積める数
 
     BOAT: {
       radius: 0.55,
-      speed: 3.0,
+      speed: 2.5,
       accel: 7,
       turn: 9,                // 旋回速度(rad/s)
-      loadSlow: 0.05,         // 積み荷1個ごとの減速率
+      loadSlow: 0.03,         // 積み荷1個ごとの減速率
       laneMul: 1.3,           // 航路(太い格子線)の上
       vortexMul: 0.65,        // 渦の中
-      dashMul: 1.75,
+      dashMul: 1.9,
       dashTime: 1.1,
-      dashCd: 5,
-      protectTime: 3,
-      protectCd: 14,
-      pickInterval: 0.3,
+      dashCd: 4,
+      protectTime: 3.5,
+      protectCd: 10,
+      pickInterval: 0.6,
+      pickDelay: 1.0,         // 落ちた資材を拾い直せるまで
       pickRange: 1.0,
-      deliverInterval: 0.25,
+      deliverInterval: 0.5,
       deliverRange: 1.0,
     },
 
     SHARK: {
       radius: 0.6,
-      speed: 2.9,
+      speed: 2.5,
       accel: 6,
       turn: 7,
       vortexMul: 1.3,         // 渦の中
-      chargeWind: 0.3,        // 突進前の溜め
+      chargeWind: 0.4,        // 突進前の溜め
       chargeTime: 0.34,
       chargeSpeed: 11,
-      chargeCd: 4,
+      chargeCd: 4.5,
       fanMul: 1.35,           // ねらい場(扇形)の中での突進強化
       diveTime: 4,
       diveCd: 10,
-      biteCd: 1.5,
+      biteCd: 1.3,
       biteRecoil: 0.4,        // 噛みつき直後の速度倍率
     },
 
     HIT: {
-      biteStun: 0.5,
-      chargeStun: 0.9,
-      immune: 2.0,            // 被弾後の無敵時間
+      biteStun: 0.35,
+      chargeStun: 0.6,
+      immune: 2.4,            // 被弾後の無敵時間(この間はサメをすり抜ける)
       biteKnock: 3,
       chargeKnock: 6,
       protectKnock: 2,
+      caseStun: 0.8,          // 保護中の船にぶつかったサメが動けない時間
+      chargeDrop: 2,          // 突進で落とす数
+      dropMin: 1.5,           // 落ちた資材が飛ぶ距離
+      dropMax: 3.0,
       spin: 14,               // 弾かれたときの回転速度(rad/s)
     },
 

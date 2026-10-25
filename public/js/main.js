@@ -210,9 +210,11 @@ canvas.addEventListener('pointerdown', e => {
   if (G.screen === 'game') {
     if (b && b.skill) { UI.pressed = b.id; skill(b.id === 'skA' ? 'a' : 'b'); return; }
     if (b) { UI.pressed = b.id; return; }
-    if (G.touch && x < G.vw * 0.55 && G.stick.id === null) {
+    // 画面のどこを触っても、その場所にスティックを出す
+    if (G.touch && G.stick.id === null) {
       G.stick.id = e.pointerId; G.stick.kx = 0; G.stick.ky = 0;
-      canvas.setPointerCapture(e.pointerId);
+      G.stick.ox = Math.max(26, Math.min(G.vw - 26, x)); G.stick.oy = Math.max(26, Math.min(G.vh - 26, y));
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* 合成イベントなど */ }
       moveStick(x, y);
     }
     return;
@@ -236,11 +238,13 @@ function endPointer(e) {
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
 
-function stickCenter() { return [34, G.vh - 36]; }
+function stickCenter() { return G.stick.id !== null ? [G.stick.ox, G.stick.oy] : [34, G.vh - 36]; }
 function moveStick(x, y) {
   const [cx, cy] = stickCenter();
   let dx = x - cx, dy = y - cy;
   const l = Math.hypot(dx, dy), max = 16;
+  // 指が大きく離れたら、スティックの土台ごと指についていく
+  if (l > max * 1.6) { G.stick.ox += dx / l * (l - max * 1.6); G.stick.oy += dy / l * (l - max * 1.6); }
   if (l > max) { dx = dx / l * max; dy = dy / l * max; }
   G.stick.kx = dx; G.stick.ky = dy;
   sendInput();
@@ -366,7 +370,12 @@ function drawHUD(st, L, myTeam, meE) {
     const ry = vh - (showKey ? 38 : 30);
     skillButton(ctx, 'skA', vw - 30, ry, 21, isBoat ? 'ダッシュ' : '突進', 'Space', mine.c1, isBoat ? C.dashCd : C.chargeCd, isBoat ? mine.f & 1 : mine.f & 12, meE.tm, showKey);
     skillButton(ctx, 'skB', vw - 78, ry + 8, 17, isBoat ? '保護' : '潜行', 'Shift', mine.c2, isBoat ? C.protectCd : C.diveCd, isBoat ? mine.f & 2 : mine.f & 16, meE.tm, showKey);
-    if (G.touch) { const [cx, cy] = stickCenter(); drawStick(ctx, cx, cy, G.stick.kx, G.stick.ky); }
+    if (G.touch) {
+      const [cx, cy] = stickCenter();
+      if (G.stick.id === null) ctx.globalAlpha = 0.45;   // 触っていないときは置き場所の目安だけ薄く
+      drawStick(ctx, cx, cy, G.stick.kx, G.stick.ky);
+      ctx.globalAlpha = 1;
+    }
     else txt(ctx, 'WASD / 矢印で移動', 8, vh - 16, 9, '#efe8d8', true);
   }
 

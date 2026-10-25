@@ -169,6 +169,7 @@ function drawTitle(ctx, vw, vh, st) {
     button(ctx, 'join', 'ルームに参加', bx, by + gap * 3, bw, bh, { band: COL.blue });
     button(ctx, 'mini', 'ゲームをえらぶ', bx, by + gap * 4, bw, bh, { band: '#7f9a6a' });
   }
+  button(ctx, 'feedback', 'ご意見', vw - (big ? 70 : 56), 6, big ? 64 : 50, big ? 24 : 18, { band: COL.inkSoft, size: big ? 12 : 10 });
   if (st.error) {
     const w = txtW(st.error, 10) + 12;
     note(ctx, Math.floor((vw - w) / 2), vh - 34, w, 22, COL.noteY, COL.noteYDark);

@@ -8,29 +8,41 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #6b4b2c; touch-action: none; -webkit-user-select: none; user-select: none; }
   #game { display: block; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
   #text { position: fixed; left: 0; top: 0; pointer-events: none; }
+  #fb { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(40, 30, 20, 0.45); }
+  #fb.open { display: flex; }
+  #fb .card { width: min(320px, calc(100vw - 32px)); background: #f3eee3; border-top: 4px solid #a8493c; box-shadow: 3px 3px 0 rgba(40, 30, 20, 0.45); padding: 12px 14px 14px; box-sizing: border-box; font-family: "Hiragino Kaku Gothic ProN","Hiragino Sans","Meiryo","BIZ UDPGothic","Yu Gothic","Noto Sans JP",sans-serif; color: #3a342d; }
+  #fb h2 { margin: 0 0 4px; font-size: 16px; text-align: center; }
+  #fb p { margin: 0 0 8px; font-size: 12px; color: #6f665a; text-align: center; }
+  #fb textarea { width: 100%; height: 120px; box-sizing: border-box; resize: none; border: 1px solid #b8b0a0; background: #fbf8f1 repeating-linear-gradient(transparent 0 21px, #d9e3e8 21px 22px); line-height: 22px; padding: 0 6px; font: inherit; font-size: 16px; color: #3a342d; -webkit-user-select: text; user-select: text; outline: none; }
+  #fb .row { display: flex; gap: 8px; margin-top: 10px; }
+  #fb button { flex: 1; font: inherit; font-size: 14px; font-weight: bold; padding: 7px 0; border: 0; border-left: 4px solid #a8493c; background: #fbf8f1; color: #3a342d; box-shadow: 2px 2px 0 rgba(40, 30, 20, 0.35); cursor: pointer; }
+  #fb button.sub { border-left-color: #6f665a; }
+  #fb button:disabled { opacity: 0.5; }
+  #fb .msg { min-height: 16px; margin-top: 8px; font-size: 12px; text-align: center; color: #a8493c; }
   #code { position: fixed; left: 50%; top: 40%; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 <canvas id="text"></canvas>
+<div id="fb"><div class="card"><h2>ご意見を送る</h2><p>気づいたことや、ほしい遊びを書いてください</p><textarea id="fbText" maxlength="1000"></textarea><div class="row"><button id="fbSend">送る</button><button id="fbClose" class="sub">閉じる</button></div><div class="msg" id="fbMsg"></div></div></div>
 <input id="code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false">
-<script src="/shared/config.js?v=11"></script>
-<script src="js/sprites.js?v=11"></script>
-<script src="js/render.js?v=11"></script>
-<script src="js/audio.js?v=11"></script>
-<script src="js/ui.js?v=11"></script>
-<script src="js/mini/core.js?v=11"></script>
-<script src="js/mini/g_keshi.js?v=11"></script>
-<script src="js/mini/g_athletic.js?v=11"></script>
-<script src="js/mini/g_shoot.js?v=11"></script>
-<script src="js/mini/g_fish.js?v=11"></script>
-<script src="js/mini/g_memory.js?v=11"></script>
-<script src="js/mini/g_stack.js?v=11"></script>
-<script src="js/mini/g_curling.js?v=11"></script>
-<script src="js/mini/g_sumo.js?v=11"></script>
-<script src="js/mini/g_hockey.js?v=11"></script>
-<script src="js/mini/g_tack.js?v=11"></script>
-<script src="js/main.js?v=11"></script>
+<script src="/shared/config.js?v=12"></script>
+<script src="js/sprites.js?v=12"></script>
+<script src="js/render.js?v=12"></script>
+<script src="js/audio.js?v=12"></script>
+<script src="js/ui.js?v=12"></script>
+<script src="js/mini/core.js?v=12"></script>
+<script src="js/mini/g_keshi.js?v=12"></script>
+<script src="js/mini/g_athletic.js?v=12"></script>
+<script src="js/mini/g_shoot.js?v=12"></script>
+<script src="js/mini/g_fish.js?v=12"></script>
+<script src="js/mini/g_memory.js?v=12"></script>
+<script src="js/mini/g_stack.js?v=12"></script>
+<script src="js/mini/g_curling.js?v=12"></script>
+<script src="js/mini/g_sumo.js?v=12"></script>
+<script src="js/mini/g_hockey.js?v=12"></script>
+<script src="js/mini/g_tack.js?v=12"></script>
+<script src="js/main.js?v=12"></script>
 </body>
 </html>

@@ -15,8 +15,45 @@ const MIME = {
   '.css': 'text/css; charset=utf-8',
 };
 
+// ---------- ご意見(フィードバック) ----------
+// 環境変数 GITHUB_TOKEN があれば GitHub の Issue にする。なければサーバーのログにだけ残す。
+const https = require('https');
+const FB_REPO = process.env.FEEDBACK_REPO || 'fantofanto1121-jpg/desktoy-battle';
+const fbLast = new Map();   // IPごとの最後の送信時刻(連投よけ)
+function fbIssue(text, where) {
+  const body = JSON.stringify({
+    title: 'ご意見: ' + text.replace(/\s+/g, ' ').slice(0, 40),
+    body: text + '\n\n---\n画面: ' + where + '\n送信: ' + new Date().toISOString(),
+    labels: ['feedback'],
+  });
+  const req = https.request({
+    host: 'api.github.com', path: '/repos/' + FB_REPO + '/issues', method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + process.env.GITHUB_TOKEN, 'User-Agent': 'desktoy-battle', 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+  }, r => { r.resume(); if (r.statusCode >= 300) console.log('[feedback] GitHub への送信に失敗', r.statusCode); });
+  req.on('error', e => console.log('[feedback] GitHub への送信に失敗', e.message));
+  req.end(body);
+}
+function feedback(req, res) {
+  let raw = '';
+  req.on('data', d => { raw += d; if (raw.length > 8000) req.destroy(); });
+  req.on('end', () => {
+    let m = {};
+    try { m = JSON.parse(raw); } catch (e) {}
+    const text = String(m.text || '').trim().slice(0, 1000), where = String(m.where || '').slice(0, 40);
+    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress).split(',')[0];
+    const now = Date.now();
+    if (!text) { res.writeHead(400); res.end('{}'); return; }
+    if (now - (fbLast.get(ip) || 0) < 15000) { res.writeHead(429); res.end('{}'); return; }
+    fbLast.set(ip, now);
+    console.log('[feedback]', where, JSON.stringify(text));
+    if (process.env.GITHUB_TOKEN) fbIssue(text, where);
+    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}');
+  });
+}
+
 // ---------- 静的ファイル ----------
 const server = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/api/feedback') { feedback(req, res); return; }
   let u = decodeURIComponent(req.url.split('?')[0]);
   if (u === '/') u = '/index.html';
   const base = u.startsWith('/shared/') ? path.join(ROOT, 'shared') : path.join(ROOT, 'public');

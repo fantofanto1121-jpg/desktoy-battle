@@ -170,6 +170,7 @@ function sendInput(force) {
 
 window.addEventListener('keydown', e => {
   AUDIO.init();
+  if (fbOpen()) return;
   const mgJ = G.screen === 'mini' && MINI.st === 'join';
   if (document.activeElement === codeInput) {
     if (e.key === 'Enter' && G.title.code.length === 4) mgJ ? mgJoinGo() : doJoin();
@@ -264,6 +265,25 @@ function moveStick(x, y) {
   sendInput();
 }
 
+// ---------- ご意見を送る ----------
+const fbEl = document.getElementById('fb'), fbText = document.getElementById('fbText'), fbMsg = document.getElementById('fbMsg'), fbSend = document.getElementById('fbSend');
+function fbOpen() { return fbEl.classList.contains('open'); }
+function fbShow() { fbEl.classList.add('open'); fbMsg.textContent = ''; fbSend.disabled = false; if (!G.touch) fbText.focus(); }
+function fbHide() { fbEl.classList.remove('open'); fbText.blur(); }
+document.getElementById('fbClose').addEventListener('click', fbHide);
+fbEl.addEventListener('pointerdown', e => { if (e.target === fbEl) fbHide(); });
+fbSend.addEventListener('click', () => {
+  const text = fbText.value.trim();
+  if (!text) { fbMsg.textContent = '何か書いてから送ってください'; return; }
+  fbSend.disabled = true; fbMsg.textContent = '送っています';
+  fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, where: G.screen + (G.screen === 'mini' && MINI.cur ? ':' + MINI.cur.name : '') }) })
+    .then(r => {
+      if (r.ok) { fbText.value = ''; fbMsg.textContent = 'ありがとうございます。届きました'; setTimeout(fbHide, 1200); }
+      else { fbSend.disabled = false; fbMsg.textContent = r.status === 429 ? '少し待ってからもう一度送ってください' : '送れませんでした'; }
+    })
+    .catch(() => { fbSend.disabled = false; fbMsg.textContent = '送れませんでした'; });
+});
+
 function doJoin() {
   const code = G.title.code;
   codeInput.blur();
@@ -279,6 +299,7 @@ function onButton(id) {
   if (G.screen === 'mini' && mgButton(id)) return;
   switch (id) {
     case 'mini': mgOpen(); break;
+    case 'feedback': fbShow(); break;
     // タイトルの4つは、本編とミニゲームを順番に遊ぶ「いろいろ対戦」
     case 'create': partyFind('create'); break;
     case 'quick': partyFind('quick'); break;

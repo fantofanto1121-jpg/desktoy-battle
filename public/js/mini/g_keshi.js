@@ -16,7 +16,7 @@ defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
   const G_ = {
     name: 'ケシバト', tint: COL.red, cpu: true, kind: 'duel',
     howto: [
-      '手前の自分の消しゴムから指を引いて、はなすとはじけます。',
+      '自分の消しゴムの近くを触って引っぱり、はなすとはじけます。',
       'ノートから落ちたら負け。相手の2個を先に落とそう。',
       '交代で1回ずつ。先に2勝したほうの勝ちです。',
     ],
@@ -67,12 +67,13 @@ defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
       for (const b of this.b) if (b.team === me && !b.out) { const d = Math.hypot(b.x - x, b.y - y); if (d < bd) { bd = d; best = b; } }
       // 指の位置が少しずれても、一番近い自分の消しゴムを選ぶ
       if (!best) for (const b of this.b) if (b.team === me && !b.out) { const d = Math.hypot(b.x - x, b.y - y); if (d < 3 && (!best || d < bd)) { bd = d; best = b; } }
-      if (best) { this.sel = best; this.aim = { dx: 0, dy: 0 }; mgSnd('tap'); }
+      if (best) { this.sel = best; this.aim = { dx: 0, dy: 0 }; this.from = [x, y]; mgSnd('tap'); }
     },
     move(sx, sy) {
       if (!this.sel || !this.aim) return;
+      // 触った所からどれだけ引いたか(消しゴムの真上を触らなくてよい)
       const [x, y] = mgToWorld(sx, sy, TOP);
-      let dx = x - this.sel.x, dy = y - this.sel.y;
+      let dx = x - this.from[0], dy = y - this.from[1];
       const l = Math.hypot(dx, dy);
       if (l > MAXP) { dx *= MAXP / l; dy *= MAXP / l; }
       this.aim.dx = dx; this.aim.dy = dy;

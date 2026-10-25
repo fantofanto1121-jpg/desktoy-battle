@@ -50,7 +50,7 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
     name: 'クリップ釣り', kind: 'duel', tint: COL.blue, cpu: true,
     howto: [
       'トレイをタップすると、磁石がそこへ下りてクリップを拾います。',
-      'ペン立てをタップすると、運んだクリップを入れます。',
+      'ペン立てか「入れる」を押すと、運んだクリップを入れます。',
       '銀1点、色つき2点、金5点。' + TIME + '秒で相手より多く集めよう。',
     ],
     stageDef() {
@@ -99,6 +99,7 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
       else { const [x, y] = mgToWorld(sx, sy, FLOOR); mgInput({ x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 }); }
       mgSnd('tap');
     },
+    button(id) { if (id === 'fishCup') { mgInput({ cup: 1 }); mgSnd('tap'); return true; } return false; },
     onAct(seat, a) {
       const m = this.mag[seat];
       if (a.cup) { this.order(m, CUP.x, CUP.y); m.goCup = true; return; }
@@ -232,6 +233,12 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
       mgHudNote(ctx, 6, 30, mgName(me), String(this.mag[me].score), me ? COL.noteB : COL.noteR, me ? COL.noteBDark : COL.noteRDark);
       mgHudNote(ctx, vw - 6, 30, mgName(1 - me), String(this.mag[1 - me].score), me ? COL.noteR : COL.noteB, me ? COL.noteRDark : COL.noteBDark, true);
       mgHudTag(ctx, vw, 'のこり ' + Math.max(0, Math.ceil(TIME - MINI.t)) + ' 秒');
+      // 運んでいるときは、ペン立てを狙わなくても入れられる大きなボタン
+      const m = this.mag[me];
+      if (m.carry.length || (this.net && this.net.c.some(c => c[5] === me))) {
+        const big = UI.big, bw = big ? 96 : 76, bh = big ? 30 : 22;
+        button(ctx, 'fishCup', '入れる', vw - bw - 8, vh - bh - 8, bw, bh, { band: COL.red, size: big ? 13 : 11 });
+      }
     },
   };
   mgRegister(G_);

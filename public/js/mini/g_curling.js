@@ -26,7 +26,7 @@ defMat('silver', ['#d5d9dc', '#b3b9bd', '#8e959a'], '#4d5357', 'metal');
   const G_ = {
     name: '定規カーリング', tint: '#c99a6a', cpu: true, kind: 'duel', noFlip: true,
     howto: [
-      '手前の硬貨から指を引いて、はなすと滑ります。',
+      '画面を触って手前へ引っぱり、はなすと硬貨が滑ります。',
       '交代で4枚ずつ。最後に的の中心に一番近い色が、',
       '相手の一番近い硬貨より内側にある枚数だけ点になります。',
     ],
@@ -74,12 +74,12 @@ defMat('silver', ['#d5d9dc', '#b3b9bd', '#8e959a'], '#4d5357', 'metal');
     onRu(x, y) { return x >= RU.x0 && x <= RU.x1 && y >= RU.y0 && y <= RU.y1; },
     down(sx, sy) {
       if (this.phase !== 'aim' || this.turn !== MINI.seat) return;
-      this.sel = this.active; this.aim = { dx: 0, dy: 0 }; mgSnd('tap');
+      this.sel = this.active; this.aim = { dx: 0, dy: 0 }; this.from = mgToWorld(sx, sy, TOP); mgSnd('tap');
     },
     move(sx, sy) {
       if (!this.sel) return;
       const [x, y] = mgToWorld(sx, sy, TOP);
-      let dx = x - this.sel.x, dy = y - this.sel.y;
+      let dx = x - this.from[0], dy = y - this.from[1];
       const l = Math.hypot(dx, dy);
       if (l > MAXP) { dx *= MAXP / l; dy *= MAXP / l; }
       this.aim.dx = dx; this.aim.dy = dy;

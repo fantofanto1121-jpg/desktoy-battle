@@ -35,7 +35,7 @@
   const G_ = {
     name: 'キャップホッケー', tint: '#5f84ab', cpu: true, kind: 'duel',
     howto: [
-      '指(マウス)を動かすと、自分の丸消しゴムがついてきます。',
+      'マウスの場所へ、スマホでは画面のどこでも指をすべらせた分だけ、自分の丸消しゴムが動きます。',
       'キャップを打って、奥にある相手のゴールに入れよう。',
       '先に' + WIN + '点で勝ち。' + TIME + '秒で終わったら点の多いほう。',
     ],
@@ -74,8 +74,24 @@
       this.p = { x: CX, y: CY + (toward ? -1.5 : 1.5), vx: 0, vy: 0, r: PR, m: 1 };
       this.pause = 0.8;
     },
-    down(sx, sy) { this.ptr = mgToWorld(sx, sy, FL); },
-    move(sx, sy, d) { if (d || !G.touch) this.ptr = mgToWorld(sx, sy, FL); },
+    // マウスはその場所へ。指は消しゴムを隠さないよう、触った所からの動きだけ消しゴムを動かす
+    down(sx, sy) {
+      const w = mgToWorld(sx, sy, FL), me = this.m[MINI.seat];
+      if (G.touch) { this.drag = w; this.ptr = [me.x, me.y]; return; }
+      this.ptr = w;
+    },
+    move(sx, sy, d) {
+      const w = mgToWorld(sx, sy, FL);
+      if (G.touch) {
+        if (!d || !this.drag) return;
+        const [y0, y1] = this.lim(MINI.seat), p = this.ptr || [this.m[MINI.seat].x, this.m[MINI.seat].y];
+        this.ptr = [Math.max(RK.x0 + MR, Math.min(RK.x1 - MR, p[0] + (w[0] - this.drag[0]) * 1.3)), Math.max(Math.max(RK.y0, y0) + MR, Math.min(Math.min(RK.y1, y1) - MR, p[1] + (w[1] - this.drag[1]) * 1.3))];
+        this.drag = w;
+        return;
+      }
+      this.ptr = w;
+    },
+    up() { this.drag = null; },
     // 自分の消しゴムのねらう場所: 指かマウスの位置(キーでも動く)
     aim(dt) {
       const me = this.m[MINI.seat], [kx, ky] = mgPadDir();

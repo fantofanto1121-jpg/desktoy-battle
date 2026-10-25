@@ -36,7 +36,7 @@
   const sp = (s) => [s, 0];   // 横位置 -> ゲーム座標
 
   const G_ = {
-    name: '文具つみ', tint: '#c56c5d', kind: 'race',
+    name: '文具つみ', tint: '#c56c5d', kind: 'race', view: [170, 170],
     howto: [
       '左右に動く文具を、タップ(Space)で落とします。',
       '下の物からはみ出しすぎると、くずれて終わり。',

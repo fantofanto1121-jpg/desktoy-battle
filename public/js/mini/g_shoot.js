@@ -54,7 +54,7 @@
     });
   }
   const ringSpr = (i) => mgSpr('shRing' + i, () => mgBake(mgModel('shRing', ringModel), { pitch: 0.3 + i * 0.35, yaw: i * 0.8, noShadow: true }));
-  function alphaAt(s, x, y) {
+  function alphaAt(s, x, y, r) {
     if (!s.mask) {
       const d = s.c.getContext('2d').getImageData(0, 0, s.c.width, s.c.height).data;
       s.mask = new Uint8Array(s.c.width * s.c.height);
@@ -62,11 +62,13 @@
     }
     x = Math.floor(x); y = Math.floor(y);
     // 指の太さぶん、まわり2画素も当たりにする
-    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
-      const xx = x + dx, yy = y + dy;
-      if (xx >= 0 && yy >= 0 && xx < s.c.width && yy < s.c.height && s.mask[yy * s.c.width + xx]) return true;
+    r = r || 2;
+    let best = -1;
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      const xx = x + dx, yy = y + dy, d = dx * dx + dy * dy;
+      if (d <= r * r && xx >= 0 && yy >= 0 && xx < s.c.width && yy < s.c.height && s.mask[yy * s.c.width + xx] && (best < 0 || d < best)) best = d;
     }
-    return false;
+    return best < 0 ? false : best + 1;
   }
 
   const ramp = (a) => a.map(hexRGB);
@@ -148,18 +150,23 @@
     },
     // 輪ゴムが届いた点で、手前の的から順に当たりを調べる
     land(x, y) {
+      // スマホでは指の太さぶん、少し外れても一番近い的に当てる
+      const r = G.touch ? Math.max(3, Math.round(12 * (window.devicePixelRatio || 1) / G.scale)) : 2;
       const cand = [];
       for (const t of this.t) {
         if (t.st !== 'up' || t.rise > 0) continue;
         const [wx, wy, wz] = this.tPos(t), s = tSpr(t.kind, t.mat, 0), [sx, sy] = mgP(wx, wy, wz);
-        if (alphaAt(s, x - (sx - s.ax), y - (sy - s.ay))) cand.push({ t, k: mgDepth(wx, wy), wx, wy, wz });
+        const d = alphaAt(s, x - (sx - s.ax), y - (sy - s.ay), r);
+        if (d) cand.push({ t, d, k: mgDepth(wx, wy), wx, wy, wz });
       }
       const sh = this.shark;
       if (sh.alive) {
         const s = this.sharkSpr(), [sx, sy] = mgP(sh.x, TIERS[1].y, TIERS[1].top);
-        if (alphaAt(s, x - (sx - s.ax), y - (sy - s.ay))) cand.push({ shark: true, k: mgDepth(sh.x, TIERS[1].y), wx: sh.x, wy: TIERS[1].y, wz: TIERS[1].top });
+        const d = alphaAt(s, x - (sx - s.ax), y - (sy - s.ay), r);
+        if (d) cand.push({ shark: true, d, k: mgDepth(sh.x, TIERS[1].y), wx: sh.x, wy: TIERS[1].y, wz: TIERS[1].top });
       }
-      cand.sort((a, b) => b.k - a.k);
+      // 指の下にじかにある的を優先し、その中では手前のもの
+      cand.sort((a, b) => (a.d <= 9 ? 0 : a.d) - (b.d <= 9 ? 0 : b.d) || b.k - a.k);
       const c = cand[0];
       if (!c) { mgSnd('soft'); return; }
       const pts = c.shark ? KINDS.shark.pts : KINDS[c.t.kind].pts;

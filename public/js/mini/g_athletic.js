@@ -136,7 +136,7 @@
   }
 
   const G_ = {
-    name: '文具アスレチック', tint: '#7f9a6a', kind: 'race',
+    name: '文具アスレチック', tint: '#7f9a6a', kind: 'race', view: [170, 110],
     howto: [
       'ぜんまい人形を動かして、文具の足場を跳び移ります。',
       '奥の缶の旗まで行けばゴール。落ちたら前の場所から。',
@@ -216,7 +216,7 @@
       p.walk += dt * (onG && sp > 0.5 ? sp * 2.4 : 0);
     },
     prog() { const p = this.p; return { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), yaw: +p.yaw.toFixed(2), w: +p.walk.toFixed(1), air: p.air > 0.05 ? 1 : 0 }; },
-    cpuScore() { return +(mgLv(50, 36, 27) + Math.random() * 8).toFixed(1); },
+    cpuScore() { return +(mgLv(32, 24, 18) + Math.random() * mgLv(8, 6, 4)).toFixed(1); },
     idle(dt) { this.mpT += dt; MP.y = 8.8 + Math.sin(this.mpT * 1.1) * 0.55; },
     draw(ctx, vw, vh) {
       const p = this.p;

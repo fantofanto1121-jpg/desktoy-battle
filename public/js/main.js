@@ -31,7 +31,9 @@ function resize() {
   const dpr = window.devicePixelRatio || 1;
   const W = Math.round(window.innerWidth * dpr), H = Math.round(window.innerHeight * dpr);
   const portrait = H > W * 1.1;
-  const scale = portrait ? Math.max(1, Math.round(W / 300)) : Math.max(1, Math.round(Math.min(W / 480, H / 270)));
+  let scale = portrait ? Math.max(1, Math.round(W / 300)) : Math.max(1, Math.round(Math.min(W / 480, H / 270)));
+  // ミニゲーム中は、舞台が画面に収まる範囲で大きく映す
+  if (G.screen === 'mini' && MINI.cur) scale = Math.max(scale, mgFitScale(W, H, scale));
   G.scale = scale;
   G.vw = Math.ceil(W / scale); G.vh = Math.ceil(H / scale);
   canvas.width = G.vw; canvas.height = G.vh;
@@ -374,6 +376,8 @@ function updateCamera(focus, dt) {
 // ---------- メインループ ----------
 let lastT = performance.now();
 function frame(now) {
+  const fit = G.screen === 'mini' ? MINI.cur : null;
+  if (fit !== G.fitFor) { G.fitFor = fit; resize(); }
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
   const vw = G.vw, vh = G.vh;

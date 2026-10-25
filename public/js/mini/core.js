@@ -146,7 +146,14 @@ function mgBakeStage(def) {
     d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
   }
   g.putImageData(img, 0, 0);
-  return { c, x: left, y: top, fill: 'rgb(' + PAL.desk[4].join(',') + ')' };
+  // 物の並んでいる範囲(画面の画素)。拡大率を決めるのに使う
+  let bx0 = 1e9, bx1 = -1e9, by0 = 1e9, by1 = -1e9;
+  for (const it of items) for (const [x, y] of [[it.x0, it.y0], [it.x1, it.y1], [it.x0, it.y1], [it.x1, it.y0]]) {
+    const [a, b] = mgV(x, y);
+    bx0 = Math.min(bx0, a * VSX); bx1 = Math.max(bx1, a * VSX);
+    by0 = Math.min(by0, b * VSY - ((it.z || 0) + (it.h || 0)) * ISO.Z); by1 = Math.max(by1, b * VSY - (it.z || 0) * ISO.Z);
+  }
+  return { c, x: left, y: top, fill: 'rgb(' + PAL.desk[4].join(',') + ')', box: items.length ? [bx1 - bx0, by1 - by0] : [200, 120] };
 }
 
 // 机の板目(本編の机と同じ調子)。座標は画面基準で、板は手前から奥へ通る
@@ -312,6 +319,16 @@ function mgSnd(name) {
     case 'lose': [392, 330, 262].forEach((f, i) => A.tone('triangle', f, f * 0.98, t + i * 0.14, 0.2, 0.2)); break;
     default: A.play(name);
   }
+}
+
+// 舞台が収まるいちばん大きい拡大率(画面の画素 W x H、ふだんの拡大率 base)
+function mgFitScale(W, H, base) {
+  const g = MINI.cur;
+  if (!MINI.stage && !g.view) return base;
+  const [sw, sh] = g.view || MINI.stage.box;
+  const portrait = H > W * 1.1;
+  const s = Math.floor(Math.min(W / (sw + 16), H / (sh + (portrait ? 150 : 80))));
+  return Math.min(Math.max(base, s), Math.floor(base * 1.5));
 }
 
 // ---------- 画面の流れ ----------
@@ -555,21 +572,24 @@ function mgFrame(ctx, dt, now, vw, vh) {
   if (MINI.st === 'result' && MINI.resT > 0.6) mgResult(ctx, vw, vh, g);
 }
 
+// せまい画面では「CPUの強さ」を上の行に出して、ボタンを横いっぱいに並べる
+function mgDiffH(w) { return (UI.big ? 24 : 17) + (w < 240 ? 15 : 0); }
 function mgDiffRow(ctx, x, y, w) {
-  const big = UI.big, dh = big ? 24 : 17, dl = 56, dw = Math.floor((w - dl - 8) / 3);
-  txt(ctx, 'CPUの強さ', x, y + Math.floor((dh - 12) / 2), 10, COL.inkSoft, true);
+  const big = UI.big, dh = big ? 24 : 17, narrow = w < 240, dl = narrow ? 0 : 56, dw = Math.floor((w - dl - 8) / 3);
+  if (narrow) { txt(ctx, 'CPUの強さ', x, y, 10, COL.inkSoft, true); y += 15; }
+  else txt(ctx, 'CPUの強さ', x, y + Math.floor((dh - 12) / 2), 10, COL.inkSoft, true);
   ['やさしい', 'ふつう', 'つよい'].forEach((name, i) => {
     const sel = G.diff === i;
     button(ctx, 'mgDiff' + i, name, x + dl + i * (dw + 4), y, dw, dh, { sel, size: 10, band: sel ? COL.ink : COL.inkSoft });
   });
-  return dh;
+  return mgDiffH(w);
 }
 
 function mgIntro(ctx, vw, vh, g) {
   const big = UI.big, cw = Math.min(300, vw - 16);
   const lines = [].concat(...g.howto.map(l => mgWrap(l, cw - 24, 10)));
   const bh = big ? 28 : 21, nb = g.kind && !MINI.party ? (big ? 26 : 20) : 0;
-  const ch = 44 + lines.length * 15 + (g.cpu && !mgHuman() ? (big ? 32 : 25) : 0) + bh + 9 + (nb ? nb * 2 + 14 : 0);
+  const ch = 44 + lines.length * 15 + (g.cpu && !mgHuman() ? mgDiffH(cw - 24) + 8 : 0) + bh + 9 + (nb ? nb * 2 + 14 : 0);
   const x = Math.floor((vw - cw) / 2), y = Math.max(28, Math.floor((vh - ch) / 2));
   card(ctx, x, y, cw, ch, { ruled: 22 });
   txt(ctx, g.name, x + cw / 2, y + 4, 14, COL.ink, true, 'c');
@@ -646,7 +666,8 @@ function mgResult(ctx, vw, vh, g) {
 }
 
 // 試合中の表示: 上の中央に札
-function mgHudTag(ctx, vw, s, y) { tape(ctx, s, vw / 2, y || 8, 10, { center: true, pad: 7 }); }
+// 幅のせまい画面では、左右の札と重ならないよう札の下に出す
+function mgHudTag(ctx, vw, s, y) { tape(ctx, s, vw / 2, y || (vw < 300 ? 68 : 8), 10, { center: true, pad: 7 }); }
 function mgHudNote(ctx, x, y, label, value, col, dark, alignRight) {
   const w = Math.max(54, txtW(value, 14, true) + 16, txtW(label, 9, true) + 16), h = 34;
   const nx = alignRight ? x - w : x;
@@ -822,7 +843,8 @@ function mgPadDir() {
   if (k.has('KeyW') || k.has('ArrowUp')) sy -= 1;
   if (k.has('KeyS') || k.has('ArrowDown')) sy += 1;
   if (sx || sy) { const l = Math.hypot(sx, sy); sx /= l; sy /= l; }
-  if (MGPAD.id !== null) { sx = MGPAD.kx / 16; sy = MGPAD.ky / 16; }
+  // スティックは少し倒せば全速になる(指で細かく加減しなくてよい)
+  if (MGPAD.id !== null) { const l = Math.hypot(MGPAD.kx, MGPAD.ky); if (l > 2) { const m = Math.min(1, (l - 2) / 6); sx = MGPAD.kx / l * m; sy = MGPAD.ky / l * m; } }
   const m = Math.min(1, Math.hypot(sx, sy)), l = Math.hypot(sx, sy);
   if (!l) return [0, 0];
   // 画面の向きがそのままゲーム座標の向き(相手側から見るときは逆)

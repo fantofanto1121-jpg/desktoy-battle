@@ -5,6 +5,7 @@ const UI = {
   buttons: [],
   hover: null,
   pressed: null,
+  big: false,
 };
 
 const COL = {
@@ -134,21 +135,23 @@ function drawTitle(ctx, vw, vh, st) {
   txt(ctx, 'デスクトイ・バトル', x + cw / 2, y + 23, 22, COL.ink, true, 'c');
   txt(ctx, '2対2 / 船が運び、サメが邪魔をする', x + cw / 2, y + 54, 10, COL.inkSoft, false, 'c');
 
-  const bw = Math.min(150, vw - 40), bx = Math.floor((vw - bw) / 2);
+  const big = UI.big;   // スマホではボタンを大きく
+  const bw = big ? Math.min(220, vw - 24) : Math.min(150, vw - 40), bx = Math.floor((vw - bw) / 2);
+  const bh = big ? 28 : 20, gap = big ? 34 : 26;
   let by = y + ch + 16;
   if (st.mode === 'join') {
-    card(ctx, bx - 14, by - 6, bw + 28, 98, {});
+    card(ctx, bx - 14, by - 6, bw + 28, big ? 114 : 98, {});
     txt(ctx, 'ルームコードを入力', vw / 2, by, 10, COL.inkSoft, false, 'c');
     const code = (st.code + '____').slice(0, 4).split('').join(' ');
     const tp = tape(ctx, code, vw / 2, by + 15, 20, { center: true, pad: 10 });
     UI.buttons.push({ id: 'codeField', x: tp.x, y: tp.y, w: tp.w, h: tp.h });
-    button(ctx, 'joinGo', '参加する', bx, by + 48, bw, 18, { disabled: st.code.length !== 4 });
-    button(ctx, 'back', '戻る', bx + bw / 2 - 30, by + 70, 60, 14, { size: 10, band: COL.inkSoft });
+    button(ctx, 'joinGo', '参加する', bx, by + 48, bw, big ? 26 : 18, { disabled: st.code.length !== 4 });
+    button(ctx, 'back', '戻る', bx + bw / 2 - (big ? 40 : 30), by + (big ? 80 : 70), big ? 80 : 60, big ? 22 : 14, { size: big ? 12 : 10, band: COL.inkSoft });
   } else {
-    button(ctx, 'solo', 'ひとりで遊ぶ', bx, by, bw, 20, { band: COL.inkSoft });
-    button(ctx, 'quick', 'ランダムマッチ', bx, by + 26, bw, 20, { band: '#c9a53f' });
-    button(ctx, 'create', '友達とルームを作る', bx, by + 52, bw, 20, { band: COL.red });
-    button(ctx, 'join', 'ルームに参加', bx, by + 78, bw, 20, { band: COL.blue });
+    button(ctx, 'solo', 'ひとりで遊ぶ', bx, by, bw, bh, { band: COL.inkSoft });
+    button(ctx, 'quick', 'ランダムマッチ', bx, by + gap, bw, bh, { band: '#c9a53f' });
+    button(ctx, 'create', '友達とルームを作る', bx, by + gap * 2, bw, bh, { band: COL.red });
+    button(ctx, 'join', 'ルームに参加', bx, by + gap * 3, bw, bh, { band: COL.blue });
   }
   if (st.error) {
     const w = txtW(st.error, 10) + 12;
@@ -175,7 +178,7 @@ function drawEraserPiece(ctx, x, y, team, isMe) {
 
 function drawLobby(ctx, vw, vh, room, me) {
   UI.buttons = [];
-  const cw = Math.min(280, vw - 16), ch = 212;
+  const cw = Math.min(280, vw - 16), ch = UI.big ? 222 : 212;
   const x = Math.floor((vw - cw) / 2), y = Math.max(6, Math.floor((vh - ch) / 2) - 6);
   card(ctx, x, y, cw, ch, { ruled: 14 });
   txt(ctx, room.pub ? 'ランダムマッチ' : 'ロビー', x + 6, y + 2, 10, COL.inkSoft, true);
@@ -208,14 +211,14 @@ function drawLobby(ctx, vw, vh, room, me) {
     UI.buttons.push({ id: 'team' + t, x: px, y: py, w: colW, h: 84 });
   }
   const isHost = room.host === me;
-  const by = y + ch - 38;
+  const by = y + ch - (UI.big ? 46 : 38);
   if (isHost) {
-    button(ctx, 'start', '開始する', x + 10, by, cw - 90, 20, { band: COL.red });
-    txt(ctx, '足りない分はボット', x + 10 + (cw - 90) / 2, by + 21, 10, COL.inkSoft, false, 'c');
+    button(ctx, 'start', '開始する', x + 10, by, cw - 90, UI.big ? 28 : 20, { band: COL.red });
+    txt(ctx, '足りない分はボット', x + 10 + (cw - 90) / 2, by + (UI.big ? 29 : 21), 10, COL.inkSoft, false, 'c');
   } else {
     txt(ctx, 'ホストの開始を待っています', x + 10 + (cw - 90) / 2, by + 4, 10, COL.inkSoft, false, 'c');
   }
-  button(ctx, 'leave', '退出', x + cw - 72, by, 62, 20, { band: COL.inkSoft, size: 10 });
+  button(ctx, 'leave', '退出', x + cw - 72, by, 62, UI.big ? 28 : 20, { band: COL.inkSoft, size: UI.big ? 12 : 10 });
   txt(ctx, 'チームの台紙を押すと移動', x + cw / 2, y + 158, 10, COL.inkSoft, false, 'c');
 }
 
@@ -377,8 +380,9 @@ function drawResult(ctx, vw, vh, res, isHost, room) {
   ctx.fillStyle = COL.paper;
   for (let k = 0; k < 14; k++) ctx.fillRect(sx + Math.floor(hash2(k, 3) * sw), sy + Math.floor(hash2(k, 9) * 22), 1, 1);
   const bx = x + cw - 104;
-  if (room && room.solo) button(ctx, 'solo', 'もう一度', bx, sy, 94, 20, { band: COL.red, size: 10 });
-  else if (isHost) button(ctx, 'toLobby', 'ロビーに戻る', bx, sy, 94, 20, { band: COL.red, size: 10 });
+  const rh = UI.big ? 26 : 20, rs = UI.big ? 12 : 10;
+  if (room && room.solo) button(ctx, 'solo', 'もう一度', bx, sy - (rh - 20), 94, rh, { band: COL.red, size: rs });
+  else if (isHost) button(ctx, 'toLobby', 'ロビーに戻る', bx, sy - (rh - 20), 94, rh, { band: COL.red, size: rs });
   else txt(ctx, 'ホストを待っています', bx + 47, sy + 5, 10, COL.inkSoft, false, 'c');
-  button(ctx, 'leave', 'タイトルへ', x + cw - 64, y + 5, 58, 15, { band: COL.inkSoft, size: 10 });
+  button(ctx, 'leave', 'タイトルへ', x + cw - (UI.big ? 74 : 64), y + 4, UI.big ? 68 : 58, UI.big ? 20 : 15, { band: COL.inkSoft, size: 10 });
 }

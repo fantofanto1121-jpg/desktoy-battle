@@ -320,6 +320,7 @@ function frame(now) {
   lastT = now;
   const vw = G.vw, vh = G.vh;
   ctx.imageSmoothingEnabled = false;
+  UI.big = G.touch;
 
   if (G.screen === 'game' && G.last) {
     sendInput();
@@ -367,9 +368,10 @@ function drawHUD(st, L, myTeam, meE) {
     const isBoat = meE.ro === 'b', C = isBoat ? CONFIG.BOAT : CONFIG.SHARK;
     const mine = L.e.find(q => q.i === G.me) || { c1: 0, c2: 0, f: 0 };
     const showKey = !G.touch;
-    const ry = vh - (showKey ? 38 : 30);
-    skillButton(ctx, 'skA', vw - 30, ry, 21, isBoat ? 'ダッシュ' : '突進', 'Space', mine.c1, isBoat ? C.dashCd : C.chargeCd, isBoat ? mine.f & 1 : mine.f & 12, meE.tm, showKey);
-    skillButton(ctx, 'skB', vw - 78, ry + 8, 17, isBoat ? '保護' : '潜行', 'Shift', mine.c2, isBoat ? C.protectCd : C.diveCd, isBoat ? mine.f & 2 : mine.f & 16, meE.tm, showKey);
+    const big = G.touch;   // スマホでは押しやすいように大きく
+    const ry = vh - (showKey ? 38 : big ? 40 : 30);
+    skillButton(ctx, 'skA', vw - (big ? 40 : 30), ry, big ? 31 : 21, isBoat ? 'ダッシュ' : '突進', 'Space', mine.c1, isBoat ? C.dashCd : C.chargeCd, isBoat ? mine.f & 1 : mine.f & 12, meE.tm, showKey);
+    skillButton(ctx, 'skB', vw - (big ? 108 : 78), ry + (big ? 10 : 8), big ? 25 : 17, isBoat ? '保護' : '潜行', 'Shift', mine.c2, isBoat ? C.protectCd : C.diveCd, isBoat ? mine.f & 2 : mine.f & 16, meE.tm, showKey);
     if (G.touch) {
       const [cx, cy] = stickCenter();
       if (G.stick.id === null) ctx.globalAlpha = 0.45;   // 触っていないときは置き場所の目安だけ薄く

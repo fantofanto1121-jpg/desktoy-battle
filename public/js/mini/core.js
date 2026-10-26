@@ -492,7 +492,7 @@ function mgNetTick(dt) {
     mgSendD({ k: 's', t: MINI.t, s: g.snap(), snd: n.snd, fx: n.fx });
     n.snd = []; n.fx = [];
   } else if (g.kind === 'race') {
-    n.sendT = 0.2;
+    n.sendT = g.progRate || 0.2;
     if (g.prog) mgSendD({ k: 'p', v: g.prog() });
   }
 }

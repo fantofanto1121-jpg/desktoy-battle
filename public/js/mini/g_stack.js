@@ -59,7 +59,7 @@
     reset() {
       this.stack = [];   // { k, s (横位置), z, half }
       this.fall = [];    // くずれた物
-      this.top = BASE.top; this.cur = null; this.over = false; this.camZ = BASE.top; this.perfect = 0; this.msgT = 0;
+      this.top = BASE.top; this.cur = null; this.opTop = undefined; this.opS = undefined; this.opC = null; this.over = false; this.camZ = BASE.top; this.perfect = 0; this.msgT = 0;
       this.next();
     },
     next() {
@@ -118,7 +118,45 @@
       for (const it of items) this.fall.push({ ...it, vz: 1, vs: dir * (2 + mgRand()), t: 0, dir });
       this.over = true; this.overT = 0; mgSnd('fall');
     },
-    prog() { return { s: this.stack.length + ' 個' }; },
+    // オンラインでは相手の塔をそのまま見せるので、積んだ物と動いている物も送る
+    progRate: 0.08,
+    prog() {
+      const r = (v) => Math.round(v * 100) / 100, c = this.cur;
+      return {
+        s: this.stack.length + ' 個', top: r(this.top),
+        st: this.stack.map(it => [it.k, r(it.s), r(it.z)]),
+        c: c ? [c.k, r(c.s), r(c.z)] : null,
+        f: this.fall.map(f => [f.k, r(f.s), r(f.z), Math.min(3, Math.floor(f.t * 5)), f.dir]),
+      };
+    },
+    // 相手の塔を、左下の小窓に同じ絵で描く
+    drawOp(ctx, vw, vh, op) {
+      const w = Math.min(104, Math.floor(vw * 0.34)), h = Math.min(116, Math.floor(vh * 0.28));
+      const x0 = 6, y0 = vh - h - 46;
+      this.opTop = this.opTop === undefined ? op.top : this.opTop + (op.top - this.opTop) * 0.15;
+      if (op.c) this.opS = this.opS === undefined || !this.opC || this.opC[0] !== op.c[0] ? op.c[1] : this.opS + (op.c[1] - this.opS) * 0.35;
+      this.opC = op.c;
+      const cam = { ox: MINI.cam.ox, oy: MINI.cam.oy };
+      const [sx, sy] = mgScreen(0, 0, this.opTop + 1.2);
+      MINI.cam.ox = Math.round(x0 + w / 2 - sx); MINI.cam.oy = Math.round(y0 + h * 0.58 - sy);
+      shadowBox(ctx, x0 - 3, y0 - 3, w + 6, h + 18, 2);
+      ctx.fillStyle = COL.paper; ctx.fillRect(x0 - 3, y0 - 3, w + 6, h + 18);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x0, y0, w, h); ctx.clip();
+      const st = MINI.stage;
+      ctx.fillStyle = st.fill; ctx.fillRect(x0, y0, w, h);
+      ctx.drawImage(st.c, st.x + MINI.cam.ox, st.y + MINI.cam.oy);
+      const objs = [];
+      for (const [k, s2, z] of op.st) objs.push({ s: spr(k, 0, 1), x: s2, z, k: z });
+      op.f.forEach(([k, s2, z, tip, dir], i) => objs.push({ s: spr(k, tip, dir), x: s2, z, k: 100 + i }));
+      if (op.c) objs.push({ s: spr(op.c[0], 0, 1), x: this.opS, z: op.c[2], k: 200 });
+      objs.sort((a, b) => a.k - b.k);
+      for (const o of objs) { const [px, py] = mgP(o.x, 0, o.z); ctx.drawImage(o.s.c, px - o.s.ax, py - o.s.ay); }
+      ctx.restore();
+      ctx.fillStyle = COL.paperEdge; ctx.fillRect(x0 - 3, y0 + h + 14, w + 6, 1);
+      txt(ctx, '相手の塔', x0, y0 + h + 3, 9, COL.inkSoft, true);
+      MINI.cam.ox = cam.ox; MINI.cam.oy = cam.oy;
+    },
     cpuScore() { return Math.round(mgLv(6, 10, 15) + Math.random() * mgLv(4, 5, 6)); },
     draw(ctx, vw, vh) {
       mgCamera(vw, vh, 0, 0, this.camZ + 1.2, Math.round(vh * 0.04));
@@ -136,6 +174,8 @@
         // 落とす位置の目安(真下に点線)
         if (c && !c.drop) { const [x, y] = sp(c.s); mgDots(g, x, y, c.z, x, y, this.top, '#efe8d8', 3); }
       });
+      const op = mgHuman() && MINI.net.op;
+      if (op && op.st) this.drawOp(ctx, vw, vh, op);
     },
     hud(ctx, vw, vh) {
       mgHudNote(ctx, vw - 6, 30, '積んだ数', String(this.stack.length), COL.noteY, COL.noteYDark, true);

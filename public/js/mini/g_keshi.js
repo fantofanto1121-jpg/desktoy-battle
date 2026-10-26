@@ -1,12 +1,15 @@
-// ケシバト: ノートの上で消しゴムをはじき合い、相手を落とす
+// ケシバト: 机の上で消しゴムをはじき合い、相手を落とす
 'use strict';
 
 defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
 
 (function () {
-  const NB = { x0: 0, y0: 0, x1: 14, y1: 14 }, TOP = 0.4, GUT = 7;
-  const PAPER = ['#f5f0e5', '#ebe5d8', '#dfd8c9', '#cfc7b6'].map(hexRGB);
-  const MAXP = 3.8, VMAX = 15;   // ひっぱりの最大(ワールド)、最大の速さ
+  const NB = { x0: 0, y0: 0, x1: 19, y1: 15 }, TOP = 1.0, BOARD = 0.5;   // 机の天板(範囲と高さ、板の厚み)
+  const CX = (NB.x0 + NB.x1) / 2, CY = (NB.y0 + NB.y1) / 2;
+  const BOOK = { x0: 0.9, y0: 0.9, x1: 5.3, y1: 4.5 };   // 机に置いたノート(絵だけ)
+  const COVER = ['#5d7394', '#53698a', '#455a79', '#384a65'].map(hexRGB);
+  const FLOOR = ['#6a5442', '#5c4838', '#4f3d2f', '#433326', '#382a1f', '#2e231a'].map(hexRGB);
+  const MAXP = 3.8, VMAX = 17;   // ひっぱりの最大(ワールド)、最大の速さ
 
   const spr = (team, a) => mgSpr('ke' + team + '|' + SPR.yawIndex(a), () => {
     const m = mgModel('keshi' + team, () => mgEraserModel(2.0, 1.3, 0.7, team ? 'sleeve' : 'sleeveR', 'sleeveW'));
@@ -17,28 +20,42 @@ defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
     name: 'ケシバト', tint: COL.red, cpu: true, kind: 'duel',
     howto: [
       '自分の消しゴムの近くを触って引っぱり、はなすとはじけます。',
-      'ノートから落ちたら負け。相手の2個を先に落とそう。',
+      '机から落ちたら負け。相手の2個を先に落とそう。',
       '交代で1回ずつ。先に2勝したほうの勝ちです。',
     ],
     stageDef() {
-      const inNb = (x, y) => x >= NB.x0 && x <= NB.x1 && y >= NB.y0 && y <= NB.y1;
       return {
-        cx: 7, cy: 7,
+        cx: CX, cy: CY, halfW: 520, halfH: 640,
+        fill: 'rgb(' + FLOOR[4].join(',') + ')',
+        // 机の外は床板。机から離れるほど暗い
+        ground(va, vb, px, py) {
+          const [ca, cb] = mgV(CX, CY);
+          const row = Math.floor((vb + 40) / 1.7), seed = hash2(row, 5) * 40;
+          if (Math.floor((vb + 40) / 1.7) !== Math.floor((vb + 40 + 1 / VSY) / 1.7)) return FLOOR[5];
+          if (hash2(row, Math.floor((va + seed) / 9)) !== hash2(row, Math.floor((va + seed + 1 / VSX) / 9))) return FLOOR[5];
+          const far = Math.hypot((va - ca) / 1.3, vb - cb) / 13;
+          return mgTone(FLOOR, 0.6 + far * 1.6 + (hash2(row, 2) > 0.5 ? 0.6 : 0) + (vnoise(va * 0.6 + seed, vb * 2) - 0.5) * 0.8, px, py);
+        },
         items: [
-          { x0: NB.x0 - 0.18, y0: NB.y0 - 0.18, x1: NB.x1 + 0.18, y1: NB.y1 + 0.18, z: 0, h: 0.08, r: 0.15,
-            top: (x, y, px, py) => mgTone(['#53698a', '#455a79', '#384a65'].map(hexRGB), 1, px, py),
-            side: [hexRGB('#3a4d69'), hexRGB('#2f3f57'), hexRGB('#26334a')] },
-          { x0: NB.x0, y0: NB.y0, x1: NB.x1, y1: NB.y1, z: 0.08, h: TOP - 0.08, edge: hexRGB('#fbf8f1'),
+          // 天板の下の暗がり(脚と幕板)
+          { x0: NB.x0 + 0.7, y0: NB.y0 + 0.7, x1: NB.x1 - 0.7, y1: NB.y1 - 0.7, z: 0, h: TOP - BOARD,
+            top: () => hexRGB('#241b14'), side: [hexRGB('#2e231b'), hexRGB('#2e231b'), hexRGB('#1f1712')] },
+          { x0: NB.x0, y0: NB.y0, x1: NB.x1, y1: NB.y1, z: TOP - BOARD, h: BOARD, r: 0.2, edge: hexRGB('#d8aa76'),
             top(x, y, px, py) {
-              const dg = Math.abs(x - GUT);
-              let L = 0.6 + (dg < 0.9 ? (0.9 - dg) / 0.9 * 2.2 : 0) + (vnoise(x * 0.8, y * 0.8) - 0.5) * 0.5;
-              let col = mgTone(PAPER, L, px, py);
-              if (dg > 0.25 && y > 1.1 && mgCross((a, b) => b - 1.1, x, y, 0.62)) col = hexRGB('#b7cdd8');
-              if (mgCross((a) => a, x, y, 100) || Math.abs(x - 1.3) < 0.05 || Math.abs(x - 8.3) < 0.05) col = hexRGB('#d9a69c');
-              if (Math.abs(x - GUT) < 0.05) col = hexRGB('#c3bba9');
+              const [va, vb] = mgV(x, y), [ca, cb] = mgV(CX, CY);
+              let col = mgDesk(va, vb, px, py, ca - 5, cb - 6);
+              // ノート(表紙、背、少し浮いた影)
+              const inB = x >= BOOK.x0 && x <= BOOK.x1 && y >= BOOK.y0 && y <= BOOK.y1;
+              if (inB) {
+                const sp = x - BOOK.x0;
+                col = mgTone(COVER, 1.2 + (sp < 0.5 ? -0.8 : 0) + (vnoise(x * 2, y * 2) - 0.5) * 0.5, px, py);
+                if (Math.abs(sp - 0.5) < 0.05) col = hexRGB('#2f3e55');
+                const lx = x - (BOOK.x0 + 1.3), ly = Math.abs(y - (BOOK.y0 + 1.1)), lw = BOOK.x1 - BOOK.x0 - 2.0;
+                if (lx > 0 && lx < lw && ly < 0.42) col = ly > 0.34 || lx < 0.06 || lx > lw - 0.06 ? hexRGB('#b8b0a0') : hexRGB('#ece6d8');
+              } else if (x > BOOK.x0 && x < BOOK.x1 + 0.12 && y > BOOK.y0 && y < BOOK.y1 + 0.12) col = mgTone(PAL.desk, 4.6, px, py);
               return col;
             },
-            side: [hexRGB('#ddd5c4'), hexRGB('#cdc4b1'), hexRGB('#b4ab98')] },
+            side: [hexRGB('#8f6440'), hexRGB('#7c5536'), hexRGB('#5a3e26')] },
         ],
       };
     },
@@ -52,7 +69,7 @@ defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
     },
     newRound() {
       const mk = (team, x, y, a) => ({ team, x, y, z: TOP, vx: 0, vy: 0, vz: 0, r: 0.82, m: 1, a, w: 0, out: false, g: TOP });
-      this.b = [mk(0, 4.2, 10.6, 0), mk(0, 9.8, 10.8, 0), mk(1, 4.0, 3.4, 0), mk(1, 9.9, 3.2, 0)];
+      this.b = [mk(0, 6.5, 11.4, 0), mk(0, 12.5, 11.6, 0), mk(1, 6.4, 3.6, 0), mk(1, 12.6, 3.4, 0)];
       this.turn = this.round % 2;   // 0 あなた, 1 CPU
       this.phase = 'aim'; this.sel = null; this.aim = null; this.cpuT = 0.9; this.msgT = 1.4;
       this.msg = 'ラウンド ' + (this.round + 1); this.msgW = -1; this.plan = null;
@@ -204,8 +221,10 @@ defMat('sleeveR', ['#c06a58', '#a45646', '#7f4136'], '#4a2620', 'paper');
       });
     },
     draw(ctx, vw, vh) {
-      mgCamera(vw, vh, 7, 7, TOP, 8);
-      const objs = this.b.map(b => ({ s: spr(b.team, b.a), x: b.x, y: b.y, z: b.z, g: b.g }));
+      mgCamera(vw, vh, CX, CY, TOP, 8);
+      // 机の奥や横の床に落ちた消しゴムは、天板の陰に隠れる
+      const hid = (b) => b.out && b.z < TOP - 0.25 && b.x > NB.x0 - 1.2 && b.x < NB.x1 + 1.2 && mgDepth(b.x, b.y) < Math.max(mgDepth(b.x, NB.y0), mgDepth(b.x, NB.y1));
+      const objs = this.b.map(b => ({ s: spr(b.team, b.a), x: b.x, y: b.y, z: b.z, g: b.g, a: hid(b) ? 0 : 1 }));
       mgDraw(ctx, vw, vh, objs, (c) => {
         mgFxDraw(c);
         // ねらいの表示: 引いた向きの反対へ点線

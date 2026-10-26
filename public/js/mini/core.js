@@ -79,7 +79,7 @@ function mgYawW(a) { return (a || 0) + (MINI.flip ? Math.PI : 0) - Math.PI / 4; 
 function mgBake(m, opt) { opt = Object.assign({}, opt || {}); opt.yaw = mgYawW(opt.yaw); return bake(m, opt); }
 
 // ---------- 舞台の焼き込み ----------
-// def: { cx, cy (舞台の中心), items: [{ x0,y0,x1,y1, z, h, r, top(x,y,px,py)->rgb, side:[手前の面, (未使用), 下端], edge }] }
+// def: { cx, cy (舞台の中心), ground(va,vb,px,py)->rgb と fill (机の代わりの地面、省略可), items: [{ x0,y0,x1,y1, z, h, r, top(x,y,px,py)->rgb, side:[手前の面, (未使用), 下端], edge }] }
 function mgBakeStage(def) {
   const items = def.items || [];
   const [vcx, vcy] = mgV(def.cx, def.cy);
@@ -141,7 +141,7 @@ function mgBakeStage(def) {
       }
     } else {
       const vb = sy / VSY, [x, y] = toG(va, vb);
-      col = shade(mgDesk(va, vb, px, py, lampX, lampY), x, y, 0, null, px, py);
+      col = shade(def.ground ? def.ground(va, vb, px, py) : mgDesk(va, vb, px, py, lampX, lampY), x, y, 0, null, px, py);
     }
     d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
   }
@@ -153,7 +153,7 @@ function mgBakeStage(def) {
     bx0 = Math.min(bx0, a * VSX); bx1 = Math.max(bx1, a * VSX);
     by0 = Math.min(by0, b * VSY - ((it.z || 0) + (it.h || 0)) * ISO.Z); by1 = Math.max(by1, b * VSY - (it.z || 0) * ISO.Z);
   }
-  return { c, x: left, y: top, fill: 'rgb(' + PAL.desk[4].join(',') + ')', box: items.length ? [bx1 - bx0, by1 - by0] : [200, 120] };
+  return { c, x: left, y: top, fill: def.fill || 'rgb(' + PAL.desk[4].join(',') + ')', box: items.length ? [bx1 - bx0, by1 - by0] : [200, 120] };
 }
 
 // 机の板目(本編の机と同じ調子)。座標は画面基準で、板は手前から奥へ通る

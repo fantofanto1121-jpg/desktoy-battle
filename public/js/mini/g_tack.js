@@ -2,7 +2,7 @@
 'use strict';
 
 (function () {
-  const AR = { x0: 0, y0: 0, x1: 12, y1: 12 }, FL = 0.08, LIVES = 3;
+  const AR = { x0: 0, y0: 0, x1: 17, y1: 12 }, FL = 0.08, LIVES = 3;
   const MATS = ['tack', 'tackY', 'tackB'];
 
   // 画鋲。up: 針が上(落ちたあと)、そうでなければ針が下(落ちている途中)
@@ -41,7 +41,7 @@
     ],
     stageDef() {
       return {
-        cx: 6, cy: 6,
+        cx: AR.x1 / 2, cy: AR.y1 / 2,
         items: [
           { x0: AR.x0, y0: AR.y0, x1: AR.x1, y1: AR.y1, z: 0, h: FL,
             top(x, y, px, py) {
@@ -50,7 +50,7 @@
               return mgTone(['#e0bd85', '#d4ae75', '#c49d66', '#b28c58'].map(hexRGB), 0.8 + (hash2(px, py) > 0.75 ? 1 : 0) + (vnoise(x * 0.8, y * 0.8) - 0.5), px, py);
             },
             side: ['#b28c58', '#9c7a4c', '#806440'].map(hexRGB) },
-          ...[[-0.45, -0.45, 12.45, 0], [-0.45, 12, 12.45, 12.45], [-0.45, 0, 0, 12], [12, 0, 12.45, 12]].map(([x0, y0, x1, y1]) => ({ x0, y0, x1, y1, z: 0, h: 0.22,
+          ...[[-0.45, -0.45, AR.x1 + 0.45, 0], [-0.45, AR.y1, AR.x1 + 0.45, AR.y1 + 0.45], [-0.45, 0, 0, AR.y1], [AR.x1, 0, AR.x1 + 0.45, AR.y1]].map(([x0, y0, x1, y1]) => ({ x0, y0, x1, y1, z: 0, h: 0.22,
             top: (x, y, px, py) => mgTone(['#9b6e45', '#875f3b', '#734f31'].map(hexRGB), 0.6 + (vnoise(x * 3, y * 3) - 0.5), px, py),
             side: ['#6e4b2f', '#5d3f27', '#4c3320'].map(hexRGB) })),
         ],
@@ -60,7 +60,7 @@
       return mgIcon('tack', 84, 52, (put) => { put(tack(0, 1), -1, 0.4, 0); put(tack(2, 0), 0.6, -0.6, 0.8); put(tack(1, 1), 0.9, 0.7, 0); });
     },
     reset() {
-      this.p = { x: 6, y: 6, vx: 0, vy: 0, yaw: Math.PI * 1.25, walk: 0, imm: 0, stun: 0 };
+      this.p = { x: AR.x1 / 2, y: AR.y1 / 2, vx: 0, vy: 0, yaw: Math.PI * 1.25, walk: 0, imm: 0, stun: 0 };
       this.tacks = []; this.gold = null; this.lives = LIVES; this.clips = 0; this.spawnT = 1; this.goldT = 3; this.dead = false;
       mgPadReset();
     },
@@ -73,12 +73,12 @@
       // 時間がたつほど多く降る
       this.spawnT -= dt;
       if (this.spawnT <= 0) {
-        const n = 1 + Math.floor(t / 20) + (mgRand() < 0.3 ? 1 : 0);
+        const n = 1 + Math.floor(t / 20) + (mgRand() < 0.6 ? 1 : 0);   // 板が広いぶん、少し多めに降らせる
         for (let k = 0; k < n; k++) {
           // 半分はプレイヤーの近くをねらう
           const near = mgRand() < 0.5;
-          const x = near ? p.x + (mgRand() - 0.5) * 3 : 0.6 + mgRand() * 10.8, y = near ? p.y + (mgRand() - 0.5) * 3 : 0.6 + mgRand() * 10.8;
-          this.tacks.push({ x: Math.max(0.5, Math.min(11.5, x)), y: Math.max(0.5, Math.min(11.5, y)), z: 9, vz: -2, c: Math.floor(mgRand() * 3), up: false, life: 3.2, warn: 0 });
+          const x = near ? p.x + (mgRand() - 0.5) * 3 : 0.6 + mgRand() * (AR.x1 - 1.2), y = near ? p.y + (mgRand() - 0.5) * 3 : 0.6 + mgRand() * (AR.y1 - 1.2);
+          this.tacks.push({ x: Math.max(0.5, Math.min(AR.x1 - 0.5, x)), y: Math.max(0.5, Math.min(AR.y1 - 0.5, y)), z: 9, vz: -2, c: Math.floor(mgRand() * 3), up: false, life: 3.2, warn: 0 });
         }
         this.spawnT = Math.max(0.35, 1.1 - t * 0.012) * (0.7 + mgRand() * 0.6);
       }
@@ -101,12 +101,12 @@
       const [dx, dy] = p.stun > 0 ? [0, 0] : mgPadDir();
       const k = Math.min(1, dt * 14);
       p.vx += (dx * 4.2 - p.vx) * k; p.vy += (dy * 4.2 - p.vy) * k;
-      p.x = Math.max(0.4, Math.min(11.6, p.x + p.vx * dt)); p.y = Math.max(0.4, Math.min(11.6, p.y + p.vy * dt));
+      p.x = Math.max(0.4, Math.min(AR.x1 - 0.4, p.x + p.vx * dt)); p.y = Math.max(0.4, Math.min(AR.y1 - 0.4, p.y + p.vy * dt));
       if (Math.hypot(dx, dy) > 0.2) p.yaw = Math.atan2(dy, dx);
       p.walk += dt * Math.hypot(p.vx, p.vy) * 2.4;
       // 金のクリップ
       this.goldT -= dt;
-      if (!this.gold && this.goldT <= 0) this.gold = { x: 1 + mgRand() * 10, y: 1 + mgRand() * 10, t: 0 };
+      if (!this.gold && this.goldT <= 0) this.gold = { x: 1 + mgRand() * (AR.x1 - 2), y: 1 + mgRand() * (AR.y1 - 2), t: 0 };
       if (this.gold) {
         this.gold.t += dt;
         if (Math.hypot(this.gold.x - p.x, this.gold.y - p.y) < 0.7) { this.clips++; mgSnd('good'); mgBurst(this.gold.x, this.gold.y, 0.4, 6, '#e2c35a', 1.5); this.gold = null; this.goldT = 2 + mgRand() * 2; }
@@ -128,7 +128,7 @@
     prog() { const p = this.p; return { x: +p.x.toFixed(2), y: +p.y.toFixed(2), yaw: +p.yaw.toFixed(2), w: +p.walk.toFixed(1), s: (Math.floor(MINI.t) + this.clips * 5) + ' 点' }; },
     cpuScore() { return Math.round(mgLv(20, 38, 60) + Math.random() * mgLv(15, 20, 25)); },
     draw(ctx, vw, vh) {
-      mgCamera(vw, vh, 6, 6, FL, 8);
+      mgCamera(vw, vh, AR.x1 / 2, AR.y1 / 2, FL, 16);
       const p = this.p, objs = [];
       const pose = Math.floor(p.walk) % 4 === 1 ? 1 : Math.floor(p.walk) % 4 === 3 ? 2 : 0;
       const blink = p.imm > 0 && Math.floor(p.imm * 10) % 2 === 0;

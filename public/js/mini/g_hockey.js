@@ -2,7 +2,7 @@
 'use strict';
 
 (function () {
-  const RK = { x0: 0, y0: 0, x1: 10, y1: 14 }, FL = 0.12, GOAL = [3.7, 6.3], CX = 5, CY = 7;
+  const RK = { x0: 0, y0: 0, x1: 12, y1: 16 }, FL = 0.12, GOAL = [4.6, 7.4], CX = 6, CY = 8;
   const WIN = 5, TIME = 90, PR = 0.42, MR = 0.62;
 
   function malletModel(sleeve) {
@@ -48,10 +48,10 @@
         cx: CX, cy: CY,
         items: [
           { x0: RK.x0, y0: RK.y0, x1: RK.x1, y1: RK.y1, z: 0, h: FL, top(x, y, px, py) {
-            let col = mgTone(floor, 0.8 + (y / 14) * 0.4 + (vnoise(x, y) - 0.5) * 0.4, px, py);
+            let col = mgTone(floor, 0.8 + (y / RK.y1) * 0.4 + (vnoise(x, y) - 0.5) * 0.4, px, py);
             const r = Math.hypot(x - CX, y - CY);
             if (Math.abs(y - CY) < 0.05 || Math.abs(r - 1.4) < 0.05) col = hexRGB('#e9f1f1');
-            for (const gy of [0, 14]) if (Math.abs(Math.hypot(x - CX, y - gy) - 2.0) < 0.05) col = hexRGB(gy ? '#c56c5d' : '#6b8db2');
+            for (const gy of [RK.y0, RK.y1]) if (Math.abs(Math.hypot(x - CX, y - gy) - 2.0) < 0.05) col = hexRGB(gy ? '#c56c5d' : '#6b8db2');
             return col;
           }, side: wallSide },
           wall(RK.x0 - W, RK.y0, RK.x0, RK.y1), wall(RK.x1, RK.y0, RK.x1 + W, RK.y1),
@@ -65,7 +65,7 @@
     },
     reset() {
       this.score = [0, 0];
-      this.m = [{ x: CX, y: 11.5, vx: 0, vy: 0, r: MR, m: 5, fixed: true, tx: CX, ty: 11.5 }, { x: CX, y: 2.5, vx: 0, vy: 0, r: MR, m: 5, fixed: true, tx: CX, ty: 2.5 }];
+      this.m = [{ x: CX, y: RK.y1 - 2.5, vx: 0, vy: 0, r: MR, m: 5, fixed: true, tx: CX, ty: RK.y1 - 2.5 }, { x: CX, y: 2.5, vx: 0, vy: 0, r: MR, m: 5, fixed: true, tx: CX, ty: 2.5 }];
       this.serve(1);
       this.ptr = null; this.sendT = 0;
       this.view = null;
@@ -128,7 +128,7 @@
         const who = p.y < CY ? 0 : 1;
         this.score[who]++;
         mgSnd(who === MINI.seat ? 'good' : 'bad');
-        mgBurst(p.x, p.y < CY ? 0 : 14, 0.4, 8, '#efe8d8', 2);
+        mgBurst(p.x, p.y < CY ? RK.y0 : RK.y1, 0.4, 8, '#efe8d8', 2);
         if (this.score[who] >= WIN) return this.end();
         this.serve(who === 0 ? 1 : 0);
         this.pause = 1.1;
@@ -141,7 +141,7 @@
       let tx, ty;
       if (p.y < CY + 0.4 && Math.hypot(p.vx, p.vy) < mgLv(5, 8, 11)) {
         // キャップの向こう側へ回り込んでから打ち抜く
-        const ux = CX + (Math.random() - 0.5) * 0.4 - p.x, uy = 14 - p.y, l = Math.hypot(ux, uy) || 1;
+        const ux = CX + (Math.random() - 0.5) * 0.4 - p.x, uy = RK.y1 - p.y, l = Math.hypot(ux, uy) || 1;
         const behind = (m.x - p.x) * ux / l + (m.y - p.y) * uy / l < -0.3;
         tx = behind ? p.x + ux / l * 0.8 : p.x - ux / l * 1.1; ty = behind ? p.y + uy / l * 0.8 : p.y - uy / l * 1.1;
       }

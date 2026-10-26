@@ -2,7 +2,7 @@
 'use strict';
 
 (function () {
-  const RING = 3.1, TOP = 0.55, BOUTS = 2;
+  const RING = 3.6, TOP = 0.55, BOUTS = 2;
   // 紙の力士(+x向き)。前で縦に折った紙を2枚の板にして、外側に横向きの力士を描く
   const ART = [
     '.......kk...', '......kkkk..', '.....ssssss.', '.....sssses.', '.....ssssss.', '......ssss..',
@@ -44,13 +44,13 @@
     stageDef() {
       return {
         cx: 0, cy: 0,
-        items: [{ x0: -4.2, y0: -4.2, x1: 4.2, y1: 4.2, z: 0, h: TOP, r: 0.15,
+        items: [{ x0: -5.2, y0: -5.2, x1: 5.2, y1: 5.2, z: 0, h: TOP, r: 0.15,
           top(x, y, px, py) {
             const r = Math.hypot(x, y);
             let col = mgTone(['#d4b083', '#c6a173', '#b28d61', '#9d7a51'].map(hexRGB), 0.9 + (vnoise(x * 3, y * 0.6) - 0.5) * 0.9 + (r < RING ? -0.4 : 0.3), px, py);
             if (Math.abs(r - RING) < 0.07 || Math.abs(r - RING - 0.2) < 0.04) col = hexRGB('#f1ece0');
             if (Math.abs(Math.abs(x) - 0.75) < 0.05 && Math.abs(y) < 0.5) col = hexRGB('#f1ece0');   // 仕切り線
-            if (Math.abs(Math.max(Math.abs(x), Math.abs(y)) - 4.0) < 0.04) col = hexRGB('#8d6d47');
+            if (Math.abs(Math.max(Math.abs(x), Math.abs(y)) - 5.0) < 0.04) col = hexRGB('#8d6d47');
             return col;
           },
           side: ['#b28d61', '#9d7a51', '#7f6240'].map(hexRGB) }],

@@ -4,8 +4,8 @@
 defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
 
 (function () {
-  const TR = { x0: 0, y0: 0, x1: 12, y1: 8 }, FLOOR = 0.12, HIGH = 2.6;
-  const CUP = { x: 14.6, y: 4, r: 1.25, h: 1.5 };
+  const TR = { x0: 0, y0: 0, x1: 14, y1: 11 }, FLOOR = 0.12, HIGH = 2.6;
+  const CUP = { x: 16.6, y: 5.5, r: 1.25, h: 1.5 };
   const TIME = 60, MAXC = 3;
   const CLIPMAT = { m: null, r: 'red', b: 'blue', y: 'yellow', g: 'gold' };
   const PTS = { m: 1, r: 2, b: 2, y: 2, g: 5 };
@@ -58,7 +58,7 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
       const wallSide = ['#cdbf9f', '#b9ab8b', '#9e9172'].map(hexRGB);
       const wall = (x0, y0, x1, y1) => ({ x0, y0, x1, y1, z: 0, h: 0.42, top: (x, y, px, py) => mgTone(tone, 0.2, px, py), side: wallSide });
       return {
-        cx: 7.4, cy: 4,
+        cx: 8.4, cy: 5.5,
         items: [
           { x0: TR.x0, y0: TR.y0, x1: TR.x1, y1: TR.y1, z: 0, h: FLOOR, top: (x, y, px, py) => mgTone(tone, 1.1 + (1 - x / TR.x1) * -0.6 + (vnoise(x * 1.5, y * 1.5) - 0.5) * 0.6, px, py), side: wallSide },
           wall(TR.x0 - 0.3, TR.y0 - 0.3, TR.x1 + 0.3, TR.y0), wall(TR.x0 - 0.3, TR.y0, TR.x0, TR.y1 + 0.3),
@@ -81,14 +81,14 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
     },
     reset() {
       this.clips = [];
-      for (let i = 0; i < 22; i++) this.addClip();
+      for (let i = 0; i < 30; i++) this.addClip();
       const mk = (team, x, y) => ({ team, x, y, z: HIGH, tx: x, ty: y, st: 'idle', carry: [], score: 0, think: 0, sway: 0 });
-      this.mag = [mk(0, 4, 6), mk(1, 9, 2)];
+      this.mag = [mk(0, 4.5, 8.5), mk(1, 10.5, 2.5)];
       this.pops = [];
     },
     addClip() {
       const r = Math.random(), c = r < 0.08 ? 'g' : r < 0.4 ? ['r', 'b', 'y'][Math.floor(Math.random() * 3)] : 'm';
-      this.clips.push({ x: 1 + Math.random() * 10, y: 1 + Math.random() * 6, z: FLOOR, a: Math.random() * Math.PI * 2, c, held: null, vz: 0, gone: false });
+      this.clips.push({ x: 1 + Math.random() * (TR.x1 - 2), y: 1 + Math.random() * (TR.y1 - 2), z: FLOOR, a: Math.random() * Math.PI * 2, c, held: null, vz: 0, gone: false });
     },
     order(m, x, y) {
       m.tx = x; m.ty = y; m.st = 'move';
@@ -205,7 +205,7 @@ defMat('gold', ['#e2c35a', '#c7a443', '#a08233'], '#5a4a1e', 'metal');
       for (const p of this.pops) p.t += dt;
     },
     draw(ctx, vw, vh) {
-      mgCamera(vw, vh, 7.4, 4, 0.6, 18);
+      mgCamera(vw, vh, 8.4, 5.5, 0.6, 18);
       const objs = [];
       for (const c of this.clips) objs.push({ s: clipSpr(c.c, c.a, !!c.held), x: c.x, y: c.y, z: c.z, g: FLOOR, k: c.held ? mgDepth(c.held.x, c.held.y) + 0.01 : mgDepth(c.x, c.y) - 0.3 });
       for (const m of this.mag) {

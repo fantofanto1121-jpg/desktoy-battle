@@ -14,7 +14,7 @@
     { k: 'pad', c: 2, x0: 3.8, y0: 14.2, x1: 5.4, y1: 15.8, top: 2.1 },
     { k: 'tape', x0: 3.2, y0: 10.0, x1: 6.0, y1: 12.8, top: 2.3, r: 1.4, cp: [4.6, 11.0] },
     { k: 'book', x0: 2.4, y0: 2, x1: 6.8, y1: 7.6, top: 2.6, cp: [4.6, 6.6] },
-    { k: 'pencil', x0: -6, y0: 4.4, x1: 2.4, y1: 5.0, top: 2.6 },
+    { k: 'pencil', x0: -6, y0: 4.25, x1: 2.4, y1: 5.15, top: 2.6, th: 0.75 },   // 本と缶にかけ渡した鉛筆(宙に浮いた橋)
     { k: 'can', x0: -8.7, y0: 3.4, x1: -6.1, y1: 6.0, top: 2.9, r: 1.3, goal: true },
   ];
   const MP = { x: 4.6, y: 8.8, s: 1.3, top: 2.45, h: 0.5 };   // 動く足場(消しゴム)
@@ -71,11 +71,17 @@
           return mgTone(R_.book, L0, px, py);
         }
         case 'pencil': {
-          if (x < p.x0 + 0.5) return Math.abs(y - (p.y0 + p.y1) / 2) < 0.05 + (x - p.x0) * 0.2 ? hexRGB('#4a4a4e') : hexRGB('#b98b5c');
-          if (x < p.x0 + 1.3) return Math.abs(y - (p.y0 + p.y1) / 2) < (x - p.x0) * 0.3 ? hexRGB('#e6c99c') : R_.pen[2];
-          if (x > p.x1 - 0.5) return hexRGB('#d39d92');
-          if (x > p.x1 - 0.9) return Math.floor(x / 0.08) % 2 ? hexRGB('#c5cbd0') : hexRGB('#9aa2a8');
-          return v < 0.33 ? R_.pen[0] : v < 0.66 ? R_.pen[1] : R_.pen[2];
+          const cy = Math.abs(y - (p.y0 + p.y1) / 2), hw = (p.y1 - p.y0) / 2;
+          if (x < p.x0 + 0.45) return cy < 0.06 + (x - p.x0) * 0.35 ? hexRGB('#4a4a4e') : hexRGB('#a98258');   // 芯
+          if (x < p.x0 + 1.3) {   // 削った木。軸へ向かって広がる
+            const t = (x - p.x0) / 1.3;
+            if (cy > hw * t + 0.08) return hexRGB('#a98258');
+            return mgTone(ramp(['#f0d6a8', '#e2c290', '#cfac78']), v * 2.2, px, py);
+          }
+          if (x > p.x1 - 0.5) return mgTone(ramp(['#e3aa9e', '#d39d92', '#bd877c']), v * 2.2, px, py);
+          if (x > p.x1 - 0.9) return Math.abs(x - (p.x1 - 0.7)) < 0.04 ? hexRGB('#80878d') : mgTone(R_.can, v * 2.2, px, py);
+          if (Math.abs(v - 0.34) < 0.03 || Math.abs(v - 0.66) < 0.03) return R_.pen[2];   // 六角の稜線
+          return v < 0.34 ? R_.pen[0] : v < 0.66 ? R_.pen[1] : R_.pen[2];
         }
         case 'can': {
           const r = Math.hypot(x - (p.x0 + p.x1) / 2, y - (p.y0 + p.y1) / 2);
@@ -139,13 +145,21 @@
     name: '文具アスレチック', tint: '#7f9a6a', kind: 'race', view: [170, 110],
     howto: [
       'ぜんまい人形を動かして、文具の足場を跳び移ります。',
-      '奥の缶の旗まで行けばゴール。落ちたら前の場所から。',
+      '奥の缶の旗まで行けばゴール。机に落ちたら負け。',
       '動く消しゴムに乗って、すき間をわたろう。',
     ],
     stageDef() {
       return {
         cx: 9, cy: 14, halfW: 700, halfH: 430,
-        items: PL.map(p => ({ x0: p.x0, y0: p.y0, x1: p.x1, y1: p.y1, z: 0, h: p.top, r: p.r || (p.k === 'eraser' || p.k === 'pad' ? 0.1 : 0.05), top: topFn(p), side: SIDES[p.k].map(hexRGB) })),
+        items: PL.flatMap(p => {
+          if (p.k === 'pencil') {
+            // 削った先、軸、金具、消しゴムで正面の色が変わるので分けて焼く
+            const it = (x0, x1, side) => ({ x0, y0: p.y0, x1, y1: p.y1, z: p.top - p.th, h: p.th, r: 0.05, top: topFn(p), side: side.map(hexRGB) });
+            return [it(p.x0, p.x0 + 1.3, ['#d2b386', '#bd9d70', '#8f7350']), it(p.x0 + 1.3, p.x1 - 0.9, SIDES.pencil),
+              it(p.x1 - 0.9, p.x1 - 0.5, ['#b3babf', '#9aa2a8', '#737a80']), it(p.x1 - 0.5, p.x1, ['#c98f84', '#b57b70', '#93605a'])];
+          }
+          return [{ x0: p.x0, y0: p.y0, x1: p.x1, y1: p.y1, z: 0, h: p.top, r: p.r || (p.k === 'eraser' || p.k === 'pad' ? 0.1 : 0.05), top: topFn(p), side: SIDES[p.k].map(hexRGB) }];
+        }),
       };
     },
     icon() {
@@ -203,6 +217,11 @@
       if (p.z <= g && p.vz <= 0) {
         if (p.vz < -4) { mgSnd('soft'); mgBurst(p.x, p.y, g, 3, '#efe8d8', 1); }
         p.z = g; p.vz = 0;
+        if (g < 0.01 && !this.done) {   // 机に落ちたら失格
+          this.done = true; this.falls++; mgSnd('fall');
+          mgFinish({ head: 'しっぱい', score: 999, unit: ' 秒', low: true, lines: ['机に落ちた'], good: false });
+          return;
+        }
         if (g > 0.01) this.lastTop = g;
         for (const q of PL) if (q.cp && inP(q, p.x, p.y) && Math.abs(q.top - g) < 0.01) this.cp = q.cp;
         const goal = PL[PL.length - 1];
@@ -211,7 +230,7 @@
           mgFinish({ head: 'ゴール', score: +MINI.t.toFixed(1), unit: ' 秒', low: true, lines: ['タイム ' + MINI.t.toFixed(1) + ' 秒', '落ちた回数 ' + this.falls], good: true });
         }
       }
-      if (p.z < this.lastTop - 1.4) { this.falls++; this.fade = 0.6; mgSnd('fall'); }
+      if (p.z < this.lastTop - 1.4 && this.ground(p.x, p.y) > 0.01) { this.falls++; this.fade = 0.6; mgSnd('fall'); }
       const sp = Math.hypot(p.vx, p.vy);
       p.walk += dt * (onG && sp > 0.5 ? sp * 2.4 : 0);
     },

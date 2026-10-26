@@ -383,9 +383,10 @@ function mgRaceResult() {
   const n = MINI.net;
   if (!n || !n.my || !n.opDone || MINI.result) return;
   const a = n.my.score, b = n.opDone.sc, u = n.my.unit || '';
+  const f = (v) => v >= 999 ? '失格' : v + u;   // 999 は失格(アスレチックで机に落ちた)
   if (n.opDone.gone) { MINI.result = { head: 'かち', lines: (n.my.lines || []).concat(['相手が抜けました']), good: true }; MINI.resT = 0; mgSnd('win'); return; }
   const d = n.my.low ? b - a : a - b;
-  const res = { head: d > 0 ? 'かち' : d < 0 ? 'まけ' : '引き分け', lines: (n.my.lines || []).concat([mgName(MINI.seat) + ' ' + a + u + '  /  ' + mgName(1 - MINI.seat) + ' ' + b + u]), good: d >= 0 };
+  const res = { head: d > 0 ? 'かち' : d < 0 ? 'まけ' : '引き分け', lines: (n.my.lines || []).concat([mgName(MINI.seat) + ' ' + f(a) + '  /  ' + mgName(1 - MINI.seat) + ' ' + f(b)]), good: d >= 0 };
   MINI.result = res; MINI.resT = 0;
   mgSnd(res.good ? 'win' : 'lose');
 }

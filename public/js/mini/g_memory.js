@@ -65,7 +65,7 @@
       for (let i = 0; i < N * N / 2; i++) pics.push(i, i);
       for (let i = pics.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pics[i], pics[j]] = [pics[j], pics[i]]; }
       this.cards = pics.map((pic, i) => ({ pic, i, gx: i % N, gy: Math.floor(i / N), f: 0, up: false, owner: -1, fly: 0, sx: 0, sy: 0, pile: 0 }));
-      this.turn = 0; this.open = []; this.wait = 0; this.score = [0, 0]; this.mem = new Map(); this.cpuT = 0;
+      this.turn = 0; this.open = []; this.wait = 0; this.score = [0, 0]; this.mem = new Map(); this.cpuT = 0; this.flips = 0;
     },
     pos(c) {
       const o = (N - 1) * GAP / 2;
@@ -73,8 +73,8 @@
     },
     flip(c) {
       c.up = true; this.open.push(c); mgSnd('flip');
-      // CPUは見た札を、強さに応じた確率で覚える
-      if (Math.random() < mgLv(0.3, 0.65, 0.95)) this.mem.set(c.i, c.pic);
+      // CPUは見た札を覚えるが、人と同じく時間がたつほど忘れる(思い出せるかは選ぶときに決める)
+      this.flips++; this.mem.set(c.i, { pic: c.pic, t: this.flips });
       if (this.open.length === 2) this.wait = 1.0;
     },
     down(sx, sy) {
@@ -91,20 +91,32 @@
       if (this.turn !== seat || this.wait > 0 || this.open.length >= 2 || !c || c.up || c.owner >= 0) return;
       this.flip(c);
     },
+    // 見てから何枚めくられたかで、思い出せる確率が下がる
+    recall(c) {
+      const m = this.mem.get(c.i);
+      if (!m) return false;
+      const age = this.flips - m.t;
+      return Math.random() < mgLv(0.55, 0.75, 0.88) * Math.exp(-age / mgLv(4, 7, 12));
+    },
+    // 覚えたつもりの札でも、ときどき隣の札と取り違える
+    blur(c, live) {
+      if (Math.random() >= mgLv(0.3, 0.18, 0.08)) return c;
+      const nb = live.filter(d => d !== c && Math.abs(d.gx - c.gx) + Math.abs(d.gy - c.gy) === 1);
+      return nb.length ? nb[Math.floor(Math.random() * nb.length)] : c;
+    },
     cpuPick() {
       const live = this.cards.filter(c => c.owner < 0 && !c.up);
       if (!live.length) return null;
-      const known = live.filter(c => this.mem.has(c.i));
+      const pick = (a) => a[Math.floor(Math.random() * a.length)];
+      const known = live.filter(c => this.recall(c));
+      const fresh = live.filter(c => !this.mem.has(c.i));
       if (this.open.length === 1) {
-        const a = this.open[0], m = known.find(c => c.pic === a.pic && c !== a);
-        if (m) return m;
-        const unk = live.filter(c => !this.mem.has(c.i));
-        return (unk.length ? unk : live)[Math.floor(Math.random() * (unk.length ? unk.length : live.length))];
+        const a = this.open[0], m = known.find(c => this.mem.get(c.i).pic === a.pic);
+        if (m) return this.blur(m, live);
+        return pick(fresh.length ? fresh : live);
       }
-      for (const c of known) for (const d of known) if (c !== d && c.pic === d.pic) return c;
-      const unk = live.filter(c => !this.mem.has(c.i));
-      const pool = unk.length ? unk : live;
-      return pool[Math.floor(Math.random() * pool.length)];
+      for (const c of known) for (const d of known) if (c !== d && this.mem.get(c.i).pic === this.mem.get(d.i).pic) return this.blur(c, live);
+      return pick(fresh.length ? fresh : live);
     },
     anim(dt) {
       for (const c of this.cards) {

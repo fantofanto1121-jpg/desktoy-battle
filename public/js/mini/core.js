@@ -55,10 +55,10 @@ function boxFill(sx, sy, sz, r, mat) {
   };
 }
 // 中央に紙スリーブを巻いた消しゴム(中心原点)
-function mgEraserModel(L, W, H, sleeve, band) {
+function mgEraserModel(L, W, H, sleeve, band, vs) {
   return makeModel({
-    size: [L, W, H], vs: 0.05, smooth: 1.2,
-    fill: boxFill(L, W, H, 0.09, (x) => {
+    size: [L, W, H], vs: vs || 0.05, smooth: 1.2,
+    fill: boxFill(L, W, H, vs ? 0.2 : 0.09, (x) => {
       const u = Math.abs(x) / (L / 2);
       if (u < 0.56) return u < 0.14 ? M[band] : M[sleeve];
       return M.rubberW;
